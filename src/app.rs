@@ -124,14 +124,8 @@ impl cosmic::Application for AppModel {
     }
 
     fn view(&self) -> Element<'_, Self::Message> {
-        let horizontal = self.core.applet.is_horizontal();
-        let (major, minor) = self.core.applet.suggested_padding(true);
-        let icon_size = self.core.applet.suggested_size(true).0;
-        let panel_icon = || {
-            widget::icon::from_name(PANEL_ICON)
-                .symbolic(true)
-                .size(icon_size)
-        };
+        let applet = &self.core.applet;
+        let horizontal = applet.is_horizontal();
 
         // On a vertical panel the applet's width *is* the panel's thickness, so a
         // text label would force the whole bar wider. There the icon stands alone
@@ -139,29 +133,53 @@ impl cosmic::Application for AppModel {
         // still honoured — that is the user accepting the width.
         let icon_only = !horizontal && self.config.panel_style == PanelStyle::Icon;
 
-        let content: Element<'_, Self::Message> = match self.panel_label() {
-            _ if icon_only => panel_icon().into(),
-            Some(label) if self.config.panel_style == PanelStyle::Icon => {
-                widget::row::with_children(vec![
-                    panel_icon().into(),
-                    self.core.applet.text(label).into(),
-                ])
-                .spacing(4)
-                .align_y(Alignment::Center)
-                .into()
-            }
-            Some(label) => self.core.applet.text(label).into(),
-            // Nothing fetched yet: show the icon alone rather than an empty slot.
-            None => panel_icon().into(),
-        };
+        let label = self.panel_label();
 
-        let padding = if horizontal { [0, major] } else { [minor, 0] };
+        // The plain icon and plain text cases have applet helpers that already size
+        // and centre the button correctly; only the icon-plus-text row has to be
+        // assembled by hand.
+        if icon_only || label.is_none() {
+            return applet
+                .icon_button(PANEL_ICON)
+                .on_press(Message::TogglePopup)
+                .into();
+        }
 
-        widget::button::custom(content)
-            .padding(padding)
-            .on_press(Message::TogglePopup)
-            .class(cosmic::theme::Button::AppletIcon)
-            .into()
+        let label = label.unwrap_or_default();
+
+        if self.config.panel_style != PanelStyle::Icon {
+            return applet
+                .text_button(applet.text(label), Message::TogglePopup)
+                .into();
+        }
+
+        // Icon + text on a horizontal panel. Mirrors what button_from_element does,
+        // minus its fixed width, which would clip the label.
+        let (major, minor) = applet.suggested_padding(true);
+        let (horizontal_padding, vertical_padding) =
+            if horizontal { (major, minor) } else { (minor, major) };
+        let suggested = applet.suggested_size(true);
+
+        let content = widget::row::with_children(vec![
+            widget::icon::from_name(PANEL_ICON)
+                .symbolic(true)
+                .size(suggested.0)
+                .into(),
+            applet.text(label).into(),
+        ])
+        .spacing(4)
+        .align_y(Alignment::Center);
+
+        widget::button::custom(
+            widget::layer_container::layer_container(content)
+                .center_y(Length::Fill)
+                .center_x(Length::Shrink),
+        )
+        .height(Length::Fixed(f32::from(suggested.1 + 2 * vertical_padding)))
+        .padding([0, horizontal_padding])
+        .on_press(Message::TogglePopup)
+        .class(cosmic::theme::Button::AppletIcon)
+        .into()
     }
 
     fn view_window(&self, _id: Id) -> Element<'_, Self::Message> {
