@@ -53,7 +53,25 @@ CBAR_CRYPTO_VS="usd"
 
 # Which coin id or stock ticker the panel label tracks.
 CBAR_CRYPTO_PANEL="bitcoin"
+
+# How much detail the panel label carries. Panel width is scarce.
+CBAR_CRYPTO_PANEL_STYLE="icon"
 ```
+
+### Panel width
+
+The panel label is the one part that costs you screen space, so it is tunable
+independently of the popup, which always shows full precision.
+
+| `CBAR_CRYPTO_PANEL_STYLE` | Renders | Width |
+|---|---|---|
+| `icon` (default) | symbolic trend glyph + `$77.1k ▲6.3%` | 12 chars + icon |
+| `compact` | `$77.1k ▲6.3%` | 12 chars |
+| `minimal` | `$77.1k` | 6 chars |
+| `full` | `BTC $77,081 ▲ 6.28%` | 19 chars |
+
+The glyph is an inline symbolic SVG recoloured by the panel theme, so it tracks
+light and dark automatically.
 
 ### Multiple currencies
 

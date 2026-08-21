@@ -6,6 +6,7 @@
 #   CBAR_CRYPTO_STOCKS="HOOD,AAPL"                                 # Yahoo tickers; empty = crypto only
 #   CBAR_CRYPTO_VS="usd"                                          # fiat currencies; first shows in the panel
 #   CBAR_CRYPTO_PANEL="bitcoin"                                   # coin id or stock ticker for the panel label
+#   CBAR_CRYPTO_PANEL_STYLE="icon"                            # icon | compact | full | minimal
 
 set -uo pipefail
 
@@ -13,6 +14,10 @@ IDS="${CBAR_CRYPTO_IDS:-bitcoin,ethereum,binancecoin,ripple,solana}"
 STOCKS="${CBAR_CRYPTO_STOCKS-}"
 VS="${CBAR_CRYPTO_VS:-usd}"
 PANEL_KEY="${CBAR_CRYPTO_PANEL:-${IDS%%,*}}"
+PANEL_STYLE="${CBAR_CRYPTO_PANEL_STYLE:-icon}"
+
+# Symbolic trend glyph, recoloured by the panel theme via templateImage.
+PANEL_ICON="PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2Ij48ZyBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIxLjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIgMTAuNSA2IDYuNSA5IDkgMTMuNSA0Ii8+PHBhdGggZD0iTTEwLjUgNGgzdjMiLz48L2c+PC9zdmc+Cg=="
 
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/cbar"
 COIN_CACHE="$CACHE_DIR/markets-coins.json"
@@ -113,6 +118,21 @@ format_amount() {
 
 change_arrow() { awk -v c="$1" 'BEGIN { printf "%s %.2f%%", (c > 0 ? "▲" : c < 0 ? "▼" : "•"), c }'; }
 
+# Panel-only: thousands become 77.0k, millions 1.2M, so the label stays narrow.
+format_compact() {
+  awk -v v="$1" 'BEGIN {
+    a = (v < 0 ? -v : v)
+    if (a >= 1e9)       printf "%.1fB", v / 1e9
+    else if (a >= 1e6)  printf "%.1fM", v / 1e6
+    else if (a >= 1e3)  printf "%.1fk", v / 1e3
+    else if (a >= 1)    printf "%.2f", v
+    else if (a >= 0.01) printf "%.4f", v
+    else                printf "%.6f", v
+  }'
+}
+
+change_arrow_short() { awk -v c="$1" 'BEGIN { printf "%s%.1f%%", (c > 0 ? "▲" : c < 0 ? "▼" : "•"), c }'; }
+
 coin_q()  { printf '%s' "$coins"  | jq -r --arg id "$1" --arg k "$2" '.[$id][$k] // empty'; }
 stock_q() { printf '%s' "$stocks" | jq -r --arg s "$1"  --arg k "$2" '.[$s][$k] // empty'; }
 
@@ -121,21 +141,52 @@ IFS=',' read -r -a vs_list <<< "$VS"
 primary_vs="${vs_list[0]}"
 
 # ---------- panel label (first line) ----------
+# Panel width is scarce, so the label is built from the narrowest parts that
+# still carry meaning. PANEL_STYLE picks how much detail survives:
+#   icon     trend glyph + compact price + short change   (default, narrowest useful)
+#   compact  compact price + short change, no glyph
+#   minimal  compact price only
+#   full     ticker + grouped price + 2-decimal change
 label=""
 p_price="$(coin_q "$PANEL_KEY" "$primary_vs")"
 if [[ -n "$p_price" ]]; then
+  p_sym="$(symbol_for "$PANEL_KEY")"
   p_change="$(coin_q "$PANEL_KEY" "${primary_vs}_24h_change")"
-  label="$(symbol_for "$PANEL_KEY") $(currency_prefix "$primary_vs")$(format_amount "$p_price")"
-  [[ -n "$p_change" ]] && label+=" $(change_arrow "$p_change")"
+  p_cur="$primary_vs"
 else
-  s_price="$(stock_q "$PANEL_KEY" price)"
-  if [[ -n "$s_price" ]]; then
-    s_change="$(stock_q "$PANEL_KEY" change)"
-    label="$PANEL_KEY $(currency_prefix "$(stock_q "$PANEL_KEY" cur)")$(format_amount "$s_price")"
-    [[ -n "$s_change" ]] && label+=" $(change_arrow "$s_change")"
+  p_price="$(stock_q "$PANEL_KEY" price)"
+  if [[ -n "$p_price" ]]; then
+    p_sym="$PANEL_KEY"
+    p_change="$(stock_q "$PANEL_KEY" change)"
+    p_cur="$(stock_q "$PANEL_KEY" cur)"
   fi
 fi
-echo "${label:-markets n/a}${stale}"
+
+if [[ -n "$p_price" ]]; then
+  pfx="$(currency_prefix "$p_cur")"
+  case "$PANEL_STYLE" in
+    full)
+      label="$p_sym $pfx$(format_amount "$p_price")"
+      [[ -n "$p_change" ]] && label+=" $(change_arrow "$p_change")"
+      ;;
+    minimal)
+      label="$pfx$(format_compact "$p_price")"
+      ;;
+    compact)
+      label="$pfx$(format_compact "$p_price")"
+      [[ -n "$p_change" ]] && label+=" $(change_arrow_short "$p_change")"
+      ;;
+    *)
+      label="$pfx$(format_compact "$p_price")"
+      [[ -n "$p_change" ]] && label+=" $(change_arrow_short "$p_change")"
+      ;;
+  esac
+fi
+
+panel_line="${label:-crypto n/a}${stale}"
+# templateImage renders as a symbolic icon that follows the panel theme.
+[[ "$PANEL_STYLE" == "icon" ]] && panel_line+=" | templateImage=$PANEL_ICON"
+echo "$panel_line"
 
 # ---------- popup ----------
 echo "---"
