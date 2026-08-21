@@ -50,8 +50,10 @@ fn srgba_to_hex(c: cosmic::cosmic_theme::palette::Srgba) -> String {
     )
 }
 
-/// Symbolic icon size used by the extra-small button preset.
-const REMOVE_ICON_SIZE: u16 = 16;
+/// Footprint of the extra-small remove button: a 16px symbolic glyph plus
+/// space_xxs of padding on every side. The idle slot reserves the same box so rows
+/// keep their height and position when edit mode is toggled.
+const REMOVE_SLOT: f32 = 16.0 + 2.0 * 8.0;
 
 /// Arrows sit in their own narrow column so they align down the list; the value
 /// column is wide enough for the realistic worst case, "-99.9%".
@@ -437,24 +439,18 @@ impl cosmic::Application for AppModel {
             ];
 
             // Remove buttons only exist while editing, so the resting popup is not
-            // a wall of X's. The row keeps its geometry either way: the slot is held
-            // open by a spacer so rows do not jump when the toggle is pressed.
+            // a wall of X's. The idle slot reserves the button's full size — width
+            // and height — so toggling edit mode moves nothing: overriding the
+            // button's own padding to match the row instead made it fail to render.
             cells.push(if self.editing {
                 widget::button::icon(widget::icon::from_name("window-close-symbolic"))
                     .extra_small()
-                    // extra_small pads all four sides, which made the button taller
-                    // than the row's text and grew every row on entering edit mode.
-                    // Horizontal padding only, so row height is unchanged.
-                    .padding([0, row_spacing.space_xxs])
                     .on_press_maybe(can_remove.then(|| Message::RemoveCoin(quote.id.clone())))
                     .into()
             } else {
-                // Hold the slot open so rows keep their geometry across the toggle.
-                // 16px glyph plus the button's padding on both sides.
                 widget::space::horizontal()
-                    .width(Length::Fixed(f32::from(
-                        REMOVE_ICON_SIZE + 2 * row_spacing.space_xxs,
-                    )))
+                    .width(Length::Fixed(REMOVE_SLOT))
+                    .height(Length::Fixed(REMOVE_SLOT))
                     .into()
             });
 
