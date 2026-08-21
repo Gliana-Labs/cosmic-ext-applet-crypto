@@ -1,6 +1,5 @@
 name := 'cosmic-applet-crypto'
 appid := 'io.github.zetakai.CosmicAppletCrypto'
-{% raw %}
 rootdir := ''
 prefix := '/usr'
 
@@ -14,6 +13,7 @@ appdata-dst := base-dir / 'share' / 'appdata' / appdata
 bin-dst := base-dir / 'bin' / name
 desktop-dst := base-dir / 'share' / 'applications' / desktop
 icon-dst := base-dir / 'share' / 'icons' / 'hicolor' / 'scalable' / 'apps' / appid + '.svg'
+symbolic-icon-dst := base-dir / 'share' / 'icons' / 'hicolor' / 'scalable' / 'apps' / appid + '-symbolic.svg'
 
 # Default recipe which runs `just build-release`
 default: build-release
@@ -50,16 +50,17 @@ check-json: (check '--message-format=json')
 run *args:
     env RUST_BACKTRACE=full cargo run --release {{args}}
 
-# Installs files
-install:
+# Installs files. Depends on build-release so a stale binary can never be shipped.
+install: build-release
     install -Dm0755 {{ cargo-target-dir / 'release' / name }} {{bin-dst}}
     install -Dm0644 {{ 'target' / 'xdgen' / 'app.desktop' }} {{desktop-dst}}
     install -Dm0644 {{ 'target' / 'xdgen' / 'app.metainfo.xml' }} {{appdata-dst}}
-    install -Dm0644 resources/icon.svg {{icon-dst}}
+    install -Dm0644 resources/icons/hicolor/scalable/apps/{{ appid }}.svg {{icon-dst}}
+    install -Dm0644 resources/icons/hicolor/scalable/apps/{{ appid }}-symbolic.svg {{symbolic-icon-dst}}
 
 # Uninstalls installed files
 uninstall:
-    rm {{bin-dst}} {{desktop-dst}} {{icon-dst}}
+    rm {{bin-dst}} {{desktop-dst}} {{icon-dst}} {{symbolic-icon-dst}}
 
 # Vendor dependencies locally
 vendor:
