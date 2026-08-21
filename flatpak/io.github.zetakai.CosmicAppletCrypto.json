@@ -39,8 +39,8 @@
         {
           "type": "git",
           "url": "https://github.com/Zetakai/cosmic-applet-crypto.git",
-          "tag": "REPLACE_WITH_TAG",
-          "commit": "REPLACE_WITH_COMMIT"
+          "tag": "v0.1.0",
+          "commit": "5850fc575548523a1cebd617b2747deecd4c8f6c"
         },
         "cargo-sources.json"
       ]
