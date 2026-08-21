@@ -124,8 +124,8 @@ impl cosmic::Application for AppModel {
     }
 
     fn view(&self) -> Element<'_, Self::Message> {
+        let horizontal = self.core.applet.is_horizontal();
         let (major, minor) = self.core.applet.suggested_padding(true);
-        let horizontal_padding = if self.core.applet.is_horizontal() { major } else { minor };
         let icon_size = self.core.applet.suggested_size(true).0;
         let panel_icon = || {
             widget::icon::from_name(PANEL_ICON)
@@ -133,20 +133,32 @@ impl cosmic::Application for AppModel {
                 .size(icon_size)
         };
 
+        // On a vertical panel the applet's width *is* the panel's thickness, so a
+        // text label would force the whole bar wider. There the icon stands alone
+        // and the prices live in the popup. An explicitly chosen text style is
+        // still honoured — that is the user accepting the width.
+        let icon_only = !horizontal && self.config.panel_style == PanelStyle::Icon;
+
         let content: Element<'_, Self::Message> = match self.panel_label() {
-            Some(label) if self.config.panel_style == PanelStyle::Icon => widget::row::with_children(
-                vec![panel_icon().into(), self.core.applet.text(label).into()],
-            )
-            .spacing(4)
-            .align_y(Alignment::Center)
-            .into(),
+            _ if icon_only => panel_icon().into(),
+            Some(label) if self.config.panel_style == PanelStyle::Icon => {
+                widget::row::with_children(vec![
+                    panel_icon().into(),
+                    self.core.applet.text(label).into(),
+                ])
+                .spacing(4)
+                .align_y(Alignment::Center)
+                .into()
+            }
             Some(label) => self.core.applet.text(label).into(),
             // Nothing fetched yet: show the icon alone rather than an empty slot.
             None => panel_icon().into(),
         };
 
+        let padding = if horizontal { [0, major] } else { [minor, 0] };
+
         widget::button::custom(content)
-            .padding([0, horizontal_padding])
+            .padding(padding)
             .on_press(Message::TogglePopup)
             .class(cosmic::theme::Button::AppletIcon)
             .into()

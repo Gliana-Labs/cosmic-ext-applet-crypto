@@ -68,6 +68,15 @@ from the popup, which always shows full precision.
 | `Minimal` | `$77.3k` | 6 chars |
 | `Full` | `BTC $77,283 ▲ 6.45%` | 19 chars |
 
+### Vertical panels
+
+On a panel anchored to the left or right edge, the applet's width is the panel's
+thickness — a text label there would force the whole bar wider. The default `Icon`
+style therefore renders the icon alone on vertical panels, with prices in the popup.
+
+Choosing `Compact`, `Minimal`, or `Full` explicitly overrides this, since picking a
+text style is accepting the width that comes with it.
+
 ## Behaviour
 
 - **Failed refresh** — the last good prices stay on screen, marked `(stale)`, rather
