@@ -258,12 +258,26 @@ fn downsample(values: &[f64], target: usize) -> Vec<f64> {
     out
 }
 
+/// Whether a price series ended the window higher than it started.
+pub fn is_rising(prices: &[f64]) -> bool {
+    prices.last() >= prices.first()
+}
+
 /// Renders a price series as a standalone SVG polyline, sized `width` x `height`.
 ///
 /// Returned as bytes for `icon::from_svg_bytes`, which avoids pulling in the canvas
-/// feature just to draw a line. Colour tracks direction over the window, so it can
-/// differ from the 24h arrow — a coin can be up on the day and down on the week.
-pub fn sparkline_svg(prices: &[f64], width: u32, height: u32) -> Option<Vec<u8>> {
+/// feature just to draw a line. The colour is passed in rather than fixed here so it
+/// can come from the desktop theme's own success and destructive colours, matching
+/// the percentage beside it.
+///
+/// Note the line's direction is over the whole window, so it can disagree with the
+/// 24h arrow: a coin can be up on the day and down on the week.
+pub fn sparkline_svg(
+    prices: &[f64],
+    width: u32,
+    height: u32,
+    colour: &str,
+) -> Option<Vec<u8>> {
     if prices.len() < 2 {
         return None;
     }
@@ -290,9 +304,6 @@ pub fn sparkline_svg(prices: &[f64], width: u32, height: u32) -> Option<Vec<u8>>
             format!("{x:.2},{y:.2}")
         })
         .collect();
-
-    let rising = prices.last() >= prices.first();
-    let colour = if rising { "#4ade80" } else { "#f87171" };
 
     Some(
         format!(
@@ -454,15 +465,15 @@ mod tests {
 
     #[test]
     fn sparkline_needs_at_least_two_points() {
-        assert!(sparkline_svg(&[], 56, 18).is_none());
-        assert!(sparkline_svg(&[1.0], 56, 18).is_none());
-        assert!(sparkline_svg(&[1.0, 2.0], 56, 18).is_some());
+        assert!(sparkline_svg(&[], 56, 18, "#4ade80").is_none());
+        assert!(sparkline_svg(&[1.0], 56, 18, "#4ade80").is_none());
+        assert!(sparkline_svg(&[1.0, 2.0], 56, 18, "#4ade80").is_some());
     }
 
     #[test]
     fn sparkline_stays_inside_its_viewbox() {
         let series = vec![10.0, 50.0, 30.0, 70.0, 20.0];
-        let svg = String::from_utf8(sparkline_svg(&series, 56, 18).unwrap()).unwrap();
+        let svg = String::from_utf8(sparkline_svg(&series, 56, 18, "#4ade80").unwrap()).unwrap();
         let points = svg
             .split("points=\"")
             .nth(1)
@@ -478,17 +489,23 @@ mod tests {
     }
 
     #[test]
-    fn sparkline_colour_tracks_direction() {
-        let up = String::from_utf8(sparkline_svg(&[1.0, 5.0], 56, 18).unwrap()).unwrap();
-        let down = String::from_utf8(sparkline_svg(&[5.0, 1.0], 56, 18).unwrap()).unwrap();
-        assert!(up.contains("#4ade80"), "rising series should be green");
-        assert!(down.contains("#f87171"), "falling series should be red");
+    fn direction_is_measured_over_the_whole_window() {
+        assert!(is_rising(&[1.0, 5.0]));
+        assert!(!is_rising(&[5.0, 1.0]));
+        // A dip in the middle does not change where the window ended.
+        assert!(is_rising(&[1.0, 0.1, 5.0]));
+    }
+
+    #[test]
+    fn sparkline_uses_the_colour_it_is_given() {
+        let svg = String::from_utf8(sparkline_svg(&[1.0, 5.0], 56, 18, "#123456").unwrap()).unwrap();
+        assert!(svg.contains("#123456"), "colour should come from the caller");
     }
 
     /// A flat series has zero range; the divide must not produce NaN coordinates.
     #[test]
     fn sparkline_survives_a_flat_series() {
-        let svg = String::from_utf8(sparkline_svg(&[42.0; 10], 56, 18).unwrap()).unwrap();
+        let svg = String::from_utf8(sparkline_svg(&[42.0; 10], 56, 18, "#4ade80").unwrap()).unwrap();
         assert!(!svg.contains("NaN"), "flat series produced NaN: {svg}");
     }
 
@@ -527,9 +544,9 @@ mod tests {
 
             // Write one out large so the rendered shape can be eyeballed.
             if q.id == "bitcoin" {
-                let svg = sparkline_svg(&q.sparkline, 240, 72).expect("svg");
+                let svg = sparkline_svg(&q.sparkline, 240, 72, "#4ade80").expect("svg");
                 std::fs::write("/tmp/btc-sparkline.svg", &svg).ok();
-                let small = sparkline_svg(&q.sparkline, 56, 18).expect("svg");
+                let small = sparkline_svg(&q.sparkline, 56, 18, "#4ade80").expect("svg");
                 std::fs::write("/tmp/btc-sparkline-56.svg", &small).ok();
             }
         }

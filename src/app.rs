@@ -13,6 +13,34 @@ use cosmic::widget;
 /// Panel icon, recoloured by the panel theme.
 const PANEL_ICON: &str = "io.github.zetakai.CosmicAppletCrypto-symbolic";
 
+/// Text::Custom takes a plain fn pointer, so these cannot be closures over the
+/// theme; they read it themselves when asked to style.
+fn up_colour(theme: &cosmic::Theme) -> cosmic::iced::widget::text::Style {
+    cosmic::iced::widget::text::Style {
+        color: Some(theme.cosmic().success.base.into()),
+        // Match what the theme uses for selected text elsewhere.
+        selected_fill: theme.cosmic().accent.base.into(),
+    }
+}
+
+fn down_colour(theme: &cosmic::Theme) -> cosmic::iced::widget::text::Style {
+    cosmic::iced::widget::text::Style {
+        color: Some(theme.cosmic().destructive.base.into()),
+        selected_fill: theme.cosmic().accent.base.into(),
+    }
+}
+
+/// The generated SVG needs its stroke as a hex string.
+fn srgba_to_hex(c: cosmic::cosmic_theme::palette::Srgba) -> String {
+    let channel = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    format!(
+        "#{:02x}{:02x}{:02x}",
+        channel(c.red),
+        channel(c.green),
+        channel(c.blue)
+    )
+}
+
 /// Rough advance width of the popup's body font, used to size the price column to
 /// its content. Approximate is fine: the column is padded either way.
 const CHAR_WIDTH: f32 = 8.5;
@@ -27,9 +55,6 @@ const FIELD_LINE_HEIGHT: u16 = 20;
 /// How often the spinner advances, and by how much per tick.
 const SPIN_INTERVAL: Duration = Duration::from_millis(40);
 const SPIN_STEP: f32 = 0.22;
-
-/// How long the confirmation tick stays up once a refresh lands.
-const CONFIRM_FOR: Duration = Duration::from_millis(1200);
 
 /// Sparkline dimensions in the popup.
 const SPARK_WIDTH: u32 = 56;
@@ -50,8 +75,9 @@ pub struct AppModel {
     add_error: Option<String>,
     /// Current angle of the spinning refresh icon, in radians.
     spin: f32,
-    /// When the last refresh completed, used to flash a tick briefly afterwards.
-    refreshed_at: Option<Instant>,
+    /// When the prices currently on screen were fetched. Approximated from the
+    /// cache's age at startup so the age is right across a restart.
+    data_time: Option<Instant>,
     /// Whether the coin-management controls are showing. Kept off by default so the
     /// popup is just prices until editing is actually wanted.
     editing: bool,
@@ -137,10 +163,15 @@ impl AppModel {
         }
     }
 
-    /// How long the tick shows after a refresh lands.
-    fn showing_confirmation(&self) -> bool {
-        self.refreshed_at
-            .is_some_and(|at| at.elapsed() < CONFIRM_FOR)
+    /// "updated 2m ago" — answers whether what is on screen is current, which a
+    /// momentary success tick does not.
+    fn freshness_label(&self) -> Option<String> {
+        let secs = self.data_time?.elapsed().as_secs();
+        Some(match secs {
+            0..=59 => fl!("updated-now"),
+            60..=3599 => fl!("updated-min", n = (secs / 60).to_string()),
+            _ => fl!("updated-hr", n = (secs / 3600).to_string()),
+        })
     }
 
     /// Kicks off a fetch for every configured coin.
@@ -204,7 +235,8 @@ impl cosmic::Application for AppModel {
             add_error: None,
             editing: false,
             spin: 0.0,
-            refreshed_at: None,
+            data_time: cache_age
+                .and_then(|age| Instant::now().checked_sub(Duration::from_secs(age))),
             stale: cache_age.is_some_and(|age| age >= interval),
             quotes,
             error: None,
@@ -279,6 +311,13 @@ impl cosmic::Application for AppModel {
     }
 
     fn view_window(&self, _id: Id) -> Element<'_, Self::Message> {
+        // Take the up/down colours from the desktop theme rather than fixing them
+        // here, so they track light and dark and any accent the user has set. The
+        // SVG needs them as hex because it is generated as text.
+        let palette = cosmic::theme::active().cosmic().clone();
+        let up_hex = srgba_to_hex(palette.success.base);
+        let down_hex = srgba_to_hex(palette.destructive.base);
+
         let prefix = crypto::currency_prefix(&self.config.currency);
         let can_remove = self.quotes.len() > 1;
 
@@ -319,8 +358,16 @@ impl cosmic::Application for AppModel {
             // A 7-day sparkline, drawn as generated SVG so no canvas feature is
             // needed. Not symbolic: its colour carries the trend and must survive
             // theming.
+            let rising_week = crypto::is_rising(&quote.sparkline);
+            let spark_colour = if rising_week { &up_hex } else { &down_hex };
+
             let spark: Element<'_, Self::Message> =
-                match crypto::sparkline_svg(&quote.sparkline, SPARK_WIDTH, SPARK_HEIGHT) {
+                match crypto::sparkline_svg(
+                    &quote.sparkline,
+                    SPARK_WIDTH,
+                    SPARK_HEIGHT,
+                    spark_colour,
+                ) {
                     Some(bytes) => widget::icon(widget::icon::from_svg_bytes(bytes))
                         .width(Length::Fixed(f32::from(SPARK_WIDTH as u16)))
                         .height(Length::Fixed(f32::from(SPARK_HEIGHT as u16)))
@@ -341,12 +388,21 @@ impl cosmic::Application for AppModel {
                 .width(Length::Fixed(price_width))
                 .into(),
                 widget::container(
+                    // Coloured by its own 24h direction, which is deliberately
+                    // independent of the sparkline's week-long one — a coin can be
+                    // up on the day and down on the week, and hiding that would be
+                    // less honest than showing two colours.
                     widget::text::body(
                         quote
                             .change
                             .map(|c| crypto::format_change(c, true))
                             .unwrap_or_default(),
                     )
+                    .class(match quote.change {
+                        Some(c) if c > 0.0 => cosmic::theme::Text::Custom(up_colour),
+                        Some(c) if c < 0.0 => cosmic::theme::Text::Custom(down_colour),
+                        _ => cosmic::theme::Text::Default,
+                    })
                     .align_x(Alignment::End),
                 )
                 .width(Length::Fixed(56.0))
@@ -428,13 +484,11 @@ impl cosmic::Application for AppModel {
             .on_press_maybe(msg)
         };
 
-        // Three states so a press is visibly acknowledged: the icon spins while the
-        // request is in flight, flashes a tick when it lands, then settles back.
+        // Two states, not three: spinning while in flight, then straight back to a
+        // refresh button. A success tick would say nothing the numbers do not.
         let refresh: Element<'_, Self::Message> = if self.loading {
             // No message while in flight, which also prevents stacking requests.
             icon_button("view-refresh-symbolic", self.spin, None).into()
-        } else if self.showing_confirmation() {
-            icon_button("object-select-symbolic", 0.0, Some(Message::Refresh)).into()
         } else {
             icon_button("view-refresh-symbolic", 0.0, Some(Message::Refresh)).into()
         };
@@ -443,8 +497,11 @@ impl cosmic::Application for AppModel {
             .padding(0)
             .on_press(Message::OpenUrl("https://www.coingecko.com/".to_owned()));
 
+        // A plus reads as "add a coin", which is the reason to open this. Collapsing
+        // uses an arrow rather than an X so it cannot be mistaken for the per-row
+        // remove buttons it sits beside.
         let edit = icon_button(
-            if self.editing { "object-select-symbolic" } else { "document-edit-symbolic" },
+            if self.editing { "go-up-symbolic" } else { "list-add-symbolic" },
             0.0,
             Some(Message::ToggleEdit),
         );
@@ -452,8 +509,12 @@ impl cosmic::Application for AppModel {
         column = column.add(
             widget::row::with_children(vec![
                 refresh,
-                browse.into(),
+                widget::text::caption(
+                    self.freshness_label().unwrap_or_else(|| fl!("never-updated")),
+                )
+                .into(),
                 widget::space::horizontal().into(),
+                browse.into(),
                 edit.into(),
             ])
             .align_y(Alignment::Center)
@@ -471,9 +532,9 @@ impl cosmic::Application for AppModel {
                 .map(|update| Message::UpdateConfig(update.config)),
         ];
 
-        // Only tick while there is something to animate: a spinning icon, or a
-        // confirmation tick waiting to time out. Otherwise the applet sits idle.
-        if self.loading || self.showing_confirmation() {
+        // Only tick while a request is actually in flight; otherwise the applet
+        // sits idle rather than animating nothing.
+        if self.loading {
             subscriptions.push(time::every(SPIN_INTERVAL).map(|_| Message::SpinTick));
         }
 
@@ -574,10 +635,10 @@ impl cosmic::Application for AppModel {
             Message::Fetched(result) => {
                 self.loading = false;
                 self.spin = 0.0;
-                self.refreshed_at = Some(Instant::now());
                 match result {
                     Ok(quotes) if !quotes.is_empty() => {
                         crypto::save_cache(&quotes);
+                        self.data_time = Some(Instant::now());
                         self.quotes = quotes;
                         self.stale = false;
                         self.error = None;

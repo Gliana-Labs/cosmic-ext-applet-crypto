@@ -13,8 +13,9 @@ SOL   ╱▔   $90.69     ▲ 4.40%
 Refresh
 ```
 
-Refreshing is visible: the icon spins while the request is in flight and flashes a
-tick when it lands, so a press is always acknowledged.
+Refreshing is visible: the icon spins while the request is in flight, and the footer
+says how old the prices are — which answers "is this current?" at any moment, not
+only just after a press.
 
 The resting popup is just prices. The **+** button reveals the coin controls: a field
 that takes a ticker, name, or CoinGecko id, and an **×** per row to stop tracking one.
@@ -39,9 +40,13 @@ finds nothing. Search results are ranked by market cap with an exact ticker matc
 preferred, so `btc` resolves to Bitcoin rather than to a wrapped derivative that
 merely contains the string. A typo is rejected before anything is saved.
 
-Each row carries a 7-day sparkline, drawn green when the week closed up and red when
-it closed down — so a coin can show a green arrow for the day beside a red line for
-the week.
+Each row carries a 7-day sparkline. Its colour and the percentage beside it both come
+from the desktop theme's success and destructive colours, so they follow light, dark,
+and any accent you have set.
+
+The two are measured over different windows on purpose: the percentage is the 24h
+move, the line is the whole week. A coin can be green for the day and red for the
+week, and showing that is more honest than picking one.
 
 COSMIC ships no crypto applet, and KDE Plasma widgets do not load in `cosmic-panel`.
 This is a native applet built on libcosmic.

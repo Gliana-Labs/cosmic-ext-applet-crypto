@@ -18,3 +18,7 @@ unknown-coin = No such coin on CoinGecko
 remove = Stop tracking
 checking = Checking…
 keep-one-coin = Keep at least one coin
+updated-now = just updated
+updated-min = updated { $n }m ago
+updated-hr = updated { $n }h ago
+never-updated = no data yet
