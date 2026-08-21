@@ -57,8 +57,12 @@ const REMOVE_SLOT: f32 = 16.0 + 2.0 * 8.0;
 
 /// Arrows sit in their own narrow column so they align down the list; the value
 /// column is wide enough for the realistic worst case, "-99.9%".
+/// Gap between cells in a coin row.
+const ROW_CELL_SPACING: u16 = 6;
+
+const SYMBOL_COL_WIDTH: f32 = 44.0;
 const ARROW_COL_WIDTH: f32 = 14.0;
-const CHANGE_COL_WIDTH: f32 = 48.0;
+const CHANGE_COL_WIDTH: f32 = 46.0;
 
 /// Rough advance width of the popup's body font, used to size the price column to
 /// its content. Approximate is fine: the column is padded either way.
@@ -76,7 +80,7 @@ const SPIN_INTERVAL: Duration = Duration::from_millis(40);
 const SPIN_STEP: f32 = 0.22;
 
 /// Sparkline dimensions in the popup.
-const SPARK_WIDTH: u32 = 56;
+const SPARK_WIDTH: u32 = 48;
 const SPARK_HEIGHT: u32 = 18;
 
 pub struct AppModel {
@@ -399,7 +403,7 @@ impl cosmic::Application for AppModel {
                 };
 
             let mut cells: Vec<Element<'_, Self::Message>> = vec![
-                widget::container(symbol).width(Length::Fixed(48.0)).into(),
+                widget::container(symbol).width(Length::Fixed(SYMBOL_COL_WIDTH)).into(),
                 spark,
                 widget::container(
                     widget::text::body(format!("{prefix}{}", crypto::format_amount(quote.price)))
@@ -439,14 +443,13 @@ impl cosmic::Application for AppModel {
             ];
 
             // Remove buttons only exist while editing, so the resting popup is not
-            // a wall of X's. The idle slot reserves the same box so toggling edit
+            // a wall of X's. The idle slot reserves the same box, so toggling edit
             // mode moves nothing.
             //
-            // The glyph is text rather than a themed icon: icon::from_name resolves
-            // through the icon theme at runtime and gives back nothing visible when
-            // the lookup misses, which fails silently and looks like a missing
-            // feature. A character always draws.
-            cells.push(if self.editing {
+            // Both go in a fixed-width container like every other cell in the row.
+            // As a bare Shrink-width child this was the only thing the layout could
+            // squeeze to nothing under width pressure, and it did.
+            let remove: Element<'_, Self::Message> = if self.editing {
                 widget::button::text("\u{2715}")
                     .padding([0, row_spacing.space_xxs])
                     .class(cosmic::theme::Button::Destructive)
@@ -454,15 +457,20 @@ impl cosmic::Application for AppModel {
                     .into()
             } else {
                 widget::space::horizontal()
-                    .width(Length::Fixed(REMOVE_SLOT))
                     .height(Length::Fixed(REMOVE_SLOT))
                     .into()
-            });
+            };
+
+            cells.push(
+                widget::container(remove)
+                    .width(Length::Fixed(REMOVE_SLOT))
+                    .into(),
+            );
 
             column = column.add(
                 widget::row::with_children(cells)
                     .align_y(Alignment::Center)
-                    .spacing(8),
+                    .spacing(ROW_CELL_SPACING),
             );
         }
 
