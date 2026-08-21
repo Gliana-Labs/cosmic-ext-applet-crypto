@@ -55,8 +55,16 @@ fn srgba_to_hex(c: cosmic::cosmic_theme::palette::Srgba) -> String {
 /// keep their height and position when edit mode is toggled.
 const REMOVE_SLOT: f32 = 16.0 + 2.0 * 8.0;
 
+/// The cell is wider than the button so the glyph has slack on both sides. Sized
+/// exactly to the button, rounding clipped it and a half-drawn X reads as a chevron.
+const REMOVE_CELL: f32 = REMOVE_SLOT + 8.0;
+
 /// Arrows sit in their own narrow column so they align down the list; the value
 /// column is wide enough for the realistic worst case, "-99.9%".
+/// Width of the add-coin field. Kept under the coin rows' width so they, not it,
+/// determine how wide the popup is.
+const ADD_FIELD_WIDTH: f32 = 170.0;
+
 /// Gap between cells in a coin row.
 const ROW_CELL_SPACING: u16 = 6;
 
@@ -459,7 +467,7 @@ impl cosmic::Application for AppModel {
                                 can_remove.then(|| Message::RemoveCoin(quote.id.clone())),
                             ),
                     )
-                    .width(Length::Fixed(REMOVE_SLOT))
+                    .width(Length::Fixed(REMOVE_CELL))
                     .align_x(Alignment::Center)
                     .into(),
                 );
@@ -486,7 +494,9 @@ impl cosmic::Application for AppModel {
                 .on_submit(|_| Message::AddCoin)
                 .size(FIELD_FONT_SIZE)
                 .padding([vertical_pad, row_spacing.space_xs])
-                .width(Length::Fill);
+                // Fixed rather than Fill: a Fill child pins the popup to its maximum
+                // width, which then leaves every coin row short of the edge.
+                .width(Length::Fixed(ADD_FIELD_WIDTH));
 
             let add = widget::button::standard(if self.validating {
                 fl!("checking")
@@ -546,13 +556,13 @@ impl cosmic::Application for AppModel {
         );
 
         column = column.add(
+            // No Fill spacer here either, for the same reason.
             widget::row::with_children(vec![
                 refresh,
                 widget::text::caption(
                     self.freshness_label().unwrap_or_else(|| fl!("never-updated")),
                 )
                 .into(),
-                widget::space::horizontal().into(),
                 browse.into(),
                 edit.into(),
             ])
