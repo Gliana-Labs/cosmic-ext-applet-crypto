@@ -17,3 +17,4 @@ already-tracked = Already tracked
 unknown-coin = No such coin on CoinGecko
 remove = Stop tracking
 checking = Checking…
+keep-one-coin = Keep at least one coin

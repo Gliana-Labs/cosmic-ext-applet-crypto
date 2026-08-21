@@ -50,16 +50,29 @@ impl Default for Config {
 }
 
 impl Config {
+    /// The coins to display, falling back to the defaults when the stored list is
+    /// empty. Removing every coin used to persist `[]`, which left the applet blank
+    /// with no way back — an empty list is treated as "unset" rather than a choice.
+    pub fn effective_coins(&self) -> Vec<String> {
+        if self.coins.is_empty() {
+            Self::default().coins
+        } else {
+            self.coins.clone()
+        }
+    }
+
     /// CoinGecko's public tier is rate limited, so never poll faster than 30s.
     pub fn refresh_interval(&self) -> std::time::Duration {
         std::time::Duration::from_secs(self.refresh_secs.clamp(30, 3600))
     }
 
     /// The coin the panel should display, tolerating a stale `panel_coin`.
-    pub fn effective_panel_coin(&self) -> Option<&String> {
-        self.coins
+    pub fn effective_panel_coin(&self) -> Option<String> {
+        let coins = self.effective_coins();
+        coins
             .iter()
-            .find(|c| *c == &self.panel_coin)
-            .or_else(|| self.coins.first())
+            .find(|c| **c == self.panel_coin)
+            .or_else(|| coins.first())
+            .cloned()
     }
 }

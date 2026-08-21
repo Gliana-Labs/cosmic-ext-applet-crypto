@@ -5,7 +5,7 @@
 //! Prices come from CoinGecko's public `simple/price` endpoint, which needs no API
 //! key. One request covers every tracked coin.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// `coins/markets` returns price, 24h change, the ticker, and a 7-day sparkline in
 /// a single request. Using it for everything keeps the displayed numbers
@@ -27,7 +27,7 @@ const USER_AGENT: &str = concat!(
 const SPARK_POINTS: usize = 48;
 
 /// One coin's price in the display currency, its 24h move, and a 7-day price series.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Quote {
     pub id: String,
     pub symbol: String,
@@ -76,6 +76,9 @@ pub async fn fetch(ids: &[String], vs: &str) -> Result<Vec<Quote>, String> {
         .await
         .map_err(|e| format!("request failed: {e}"))?;
 
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err("rate limited by CoinGecko".to_owned());
+    }
     if !response.status().is_success() {
         return Err(format!("CoinGecko returned {}", response.status()));
     }
@@ -101,6 +104,67 @@ pub async fn fetch(ids: &[String], vs: &str) -> Result<Vec<Quote>, String> {
         .collect();
 
     Ok(quotes)
+}
+
+/// Where the last good response is kept between runs.
+///
+/// Without this every launch is a cold start that must reach the network before it
+/// can show anything, so a single rate-limited request leaves the popup empty.
+fn cache_path() -> Option<std::path::PathBuf> {
+    let base = std::env::var_os("XDG_CACHE_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".cache")))?;
+    Some(base.join("cosmic-applet-crypto").join("quotes.json"))
+}
+
+/// Quotes plus when they were taken, so staleness can be judged on load.
+#[derive(Serialize, Deserialize)]
+pub struct CachedQuotes {
+    pub quotes: Vec<Quote>,
+    /// Unix seconds at which these were fetched.
+    pub fetched_at: u64,
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Reads the cached quotes and their age in seconds. Any failure — missing file,
+/// unreadable, written by an older version — is simply treated as no cache.
+pub fn load_cache() -> Option<(Vec<Quote>, u64)> {
+    load_cache_from(&cache_path()?)
+}
+
+/// Best-effort write of the latest quotes. A failure here must never affect what is
+/// on screen, so the result is discarded.
+pub fn save_cache(quotes: &[Quote]) {
+    let Some(path) = cache_path() else { return };
+    save_cache_to(&path, quotes);
+}
+
+// The path is taken explicitly by these two so tests can exercise them without
+// mutating XDG_CACHE_HOME, which would race across parallel test threads.
+
+fn load_cache_from(path: &std::path::Path) -> Option<(Vec<Quote>, u64)> {
+    let raw = std::fs::read(path).ok()?;
+    let cached: CachedQuotes = serde_json::from_slice(&raw).ok()?;
+    let age = now_secs().saturating_sub(cached.fetched_at);
+    Some((cached.quotes, age))
+}
+
+fn save_cache_to(path: &std::path::Path, quotes: &[Quote]) {
+    if let Some(dir) = path.parent() {
+        if std::fs::create_dir_all(dir).is_err() {
+            return;
+        }
+    }
+    let payload = CachedQuotes { quotes: quotes.to_vec(), fetched_at: now_secs() };
+    if let Ok(bytes) = serde_json::to_vec(&payload) {
+        let _ = std::fs::write(path, bytes);
+    }
 }
 
 /// Resolves whatever the user typed into a CoinGecko slug.
@@ -514,6 +578,48 @@ mod tests {
     #[test]
     fn empty_search_results_yield_nothing() {
         assert!(pick_best_match(&[], "btc").is_none());
+    }
+
+    fn scratch_cache(tag: &str) -> std::path::PathBuf {
+        std::env::temp_dir()
+            .join(format!("cosmic-applet-crypto-test-{}-{tag}", std::process::id()))
+            .join("quotes.json")
+    }
+
+    #[test]
+    fn cache_round_trips_and_reports_age() {
+        let path = scratch_cache("roundtrip");
+        let quotes = vec![Quote {
+            id: "bitcoin".into(),
+            symbol: "BTC".into(),
+            price: 77_000.0,
+            change: Some(6.4),
+            sparkline: vec![1.0, 2.0, 3.0],
+        }];
+
+        save_cache_to(&path, &quotes);
+        let (loaded, age) = load_cache_from(&path).expect("cache should read back");
+        assert_eq!(loaded, quotes);
+        assert!(age < 5, "freshly written cache reported age {age}s");
+
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn missing_cache_is_not_an_error() {
+        assert!(load_cache_from(&scratch_cache("absent")).is_none());
+    }
+
+    #[test]
+    fn corrupt_cache_is_not_an_error() {
+        let path = scratch_cache("corrupt");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, b"not json at all").unwrap();
+        assert!(
+            load_cache_from(&path).is_none(),
+            "a corrupt cache must read as absent, not panic"
+        );
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
     }
 
     #[test]

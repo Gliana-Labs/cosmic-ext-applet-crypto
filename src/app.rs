@@ -29,6 +29,9 @@ pub struct AppModel {
     validating: bool,
     /// Why the last add attempt failed, shown under the field.
     add_error: Option<String>,
+    /// Whether the coin-management controls are showing. Kept off by default so the
+    /// popup is just prices until editing is actually wanted.
+    editing: bool,
     /// Latest successful quotes. Retained across failed refreshes so the panel keeps
     /// showing the last known prices rather than going blank.
     quotes: Vec<Quote>,
@@ -58,6 +61,8 @@ pub enum Message {
     CoinValidated(Result<String, String>),
     /// Stop tracking a coin.
     RemoveCoin(String),
+    /// Show or hide the coin-management controls.
+    ToggleEdit,
     /// A spawned side effect finished and needs no state change.
     Ignore,
 }
@@ -66,7 +71,7 @@ impl AppModel {
     /// Builds the panel label from the tracked coin, honouring the configured style.
     fn panel_label(&self) -> Option<String> {
         let coin = self.config.effective_panel_coin()?;
-        let quote = self.quotes.iter().find(|q| &q.id == coin)?;
+        let quote = self.quotes.iter().find(|q| q.id == coin)?;
         let prefix = crypto::currency_prefix(&self.config.currency);
 
         let label = match self.config.panel_style {
@@ -113,7 +118,7 @@ impl AppModel {
             return Task::none();
         }
         self.loading = true;
-        let coins = self.config.coins.clone();
+        let coins = self.config.effective_coins();
         let currency = self.config.currency.clone();
         cosmic::task::future(async move { Message::Fetched(crypto::fetch(&coins, &currency).await) })
     }
@@ -144,6 +149,20 @@ impl cosmic::Application for AppModel {
             })
             .unwrap_or_default();
 
+        // Load the previous run's prices so the panel and popup are populated
+        // instantly, without waiting on — or depending on — a network round trip.
+        let cached = crypto::load_cache();
+        let interval = config.refresh_interval().as_secs();
+        let (quotes, cache_age) = match cached {
+            Some((quotes, age)) => (quotes, Some(age)),
+            None => (Vec::new(), None),
+        };
+
+        // Only reach for the network if the cache is missing or already due. A panel
+        // restart should not cost a request, which is what turns a burst of restarts
+        // into a rate limit.
+        let needs_fetch = cache_age.is_none_or(|age| age >= interval);
+
         let mut app = AppModel {
             core,
             popup: None,
@@ -152,14 +171,14 @@ impl cosmic::Application for AppModel {
             coin_input: String::new(),
             validating: false,
             add_error: None,
-            quotes: Vec::new(),
-            stale: false,
+            editing: false,
+            stale: cache_age.is_some_and(|age| age >= interval),
+            quotes,
             error: None,
             loading: false,
         };
 
-        // Fetch immediately so the panel is populated before the first timer tick.
-        let task = app.refresh();
+        let task = if needs_fetch { app.refresh() } else { Task::none() };
         (app, task)
     }
 
@@ -227,37 +246,15 @@ impl cosmic::Application for AppModel {
     }
 
     fn view_window(&self, _id: Id) -> Element<'_, Self::Message> {
-        let mut column = widget::list_column();
+        let prefix = crypto::currency_prefix(&self.config.currency);
+        let can_remove = self.quotes.len() > 1;
+        let mut rows: Vec<Element<'_, Self::Message>> = Vec::new();
 
         if let Some(error) = &self.error {
-            column = column.add(widget::text::body(error.clone()));
+            rows.push(widget::text::caption(error.clone()).into());
         }
 
         for quote in &self.quotes {
-            let prefix = crypto::currency_prefix(&self.config.currency);
-            let price = format!("{prefix}{}", crypto::format_amount(quote.price));
-            let change = quote
-                .change
-                .map(|c| crypto::format_change(c, false))
-                .unwrap_or_default();
-
-            // A 7-day sparkline, drawn as generated SVG so no canvas feature is
-            // needed. Not symbolic: its colour carries the trend direction and must
-            // survive theming.
-            let spark: Element<'_, Self::Message> =
-                match crypto::sparkline_svg(&quote.sparkline, SPARK_WIDTH, SPARK_HEIGHT) {
-                    // from_svg_bytes yields a non-symbolic handle, so the stroke
-                    // colour in the generated SVG is preserved rather than themed.
-                    Some(bytes) => widget::icon(widget::icon::from_svg_bytes(bytes))
-                        .width(Length::Fixed(f32::from(SPARK_WIDTH as u16)))
-                        .height(Length::Fixed(f32::from(SPARK_HEIGHT as u16)))
-                        .into(),
-                    // Keep the column aligned when a coin has no series.
-                    None => widget::space::horizontal()
-                        .width(Length::Fixed(f32::from(SPARK_WIDTH as u16)))
-                        .into(),
-                };
-
             // Only the symbol navigates. With a remove button in the same row, a
             // whole-row target would turn a near-miss on the X into an opened
             // browser tab, and a link ought to look like one.
@@ -268,66 +265,130 @@ impl cosmic::Application for AppModel {
                     quote.id
                 )));
 
-            let row = widget::row::with_children(vec![
+            // A 7-day sparkline, drawn as generated SVG so no canvas feature is
+            // needed. Not symbolic: its colour carries the trend and must survive
+            // theming.
+            let spark: Element<'_, Self::Message> =
+                match crypto::sparkline_svg(&quote.sparkline, SPARK_WIDTH, SPARK_HEIGHT) {
+                    Some(bytes) => widget::icon(widget::icon::from_svg_bytes(bytes))
+                        .width(Length::Fixed(f32::from(SPARK_WIDTH as u16)))
+                        .height(Length::Fixed(f32::from(SPARK_HEIGHT as u16)))
+                        .into(),
+                    // Keep the column aligned when a coin has no series.
+                    None => widget::space::horizontal()
+                        .width(Length::Fixed(f32::from(SPARK_WIDTH as u16)))
+                        .into(),
+                };
+
+            // Price and change stack tight against each other on the right so the
+            // numbers read as one unit rather than two drifting columns.
+            let mut cells: Vec<Element<'_, Self::Message>> = vec![
                 widget::container(symbol)
-                    .width(Length::Fixed(56.0))
+                    .width(Length::Fixed(46.0))
                     .into(),
                 spark,
-                widget::text::body(price).width(Length::Fill).into(),
-                widget::text::body(change).into(),
-                widget::button::icon(widget::icon::from_name("window-close-symbolic"))
-                    .extra_small()
-                    .on_press(Message::RemoveCoin(quote.id.clone()))
+                widget::container(
+                    widget::text::body(format!("{prefix}{}", crypto::format_amount(quote.price)))
+                        .align_x(Alignment::End),
+                )
+                .width(Length::Fill)
+                .into(),
+                widget::container(
+                    widget::text::caption(
+                        quote
+                            .change
+                            .map(|c| crypto::format_change(c, true))
+                            .unwrap_or_default(),
+                    )
+                    .align_x(Alignment::End),
+                )
+                .width(Length::Fixed(52.0))
+                .into(),
+            ];
+
+            // Remove buttons only exist while editing, so the resting popup is not
+            // a wall of X's.
+            if self.editing {
+                cells.push(
+                    widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                        .extra_small()
+                        .on_press_maybe(
+                            can_remove.then(|| Message::RemoveCoin(quote.id.clone())),
+                        )
+                        .into(),
+                );
+            }
+
+            rows.push(
+                widget::row::with_children(cells)
+                    .align_y(Alignment::Center)
+                    .spacing(8)
                     .into(),
-            ])
-            .align_y(Alignment::Center)
-            .spacing(8);
-
-            column = column.add(cosmic::applet::padded_control(row));
+            );
         }
 
-        // Add-coin field. Submitting on Enter as well as the button, since typing a
-        // slug then reaching for the mouse is the slower path.
-        let input = widget::text_input(fl!("coin-placeholder"), &self.coin_input)
-            .on_input(Message::CoinInputChanged)
-            .on_submit(|_| Message::AddCoin)
-            .width(Length::Fill);
+        if self.editing {
+            let input = widget::text_input(fl!("coin-placeholder"), &self.coin_input)
+                .on_input(Message::CoinInputChanged)
+                .on_submit(|_| Message::AddCoin)
+                .width(Length::Fill);
 
-        let add = widget::button::standard(if self.validating {
-            fl!("checking")
-        } else {
-            fl!("add-coin")
-        })
-        .on_press_maybe((!self.validating).then_some(Message::AddCoin));
+            let add = widget::button::standard(if self.validating {
+                fl!("checking")
+            } else {
+                fl!("add-coin")
+            })
+            .on_press_maybe((!self.validating).then_some(Message::AddCoin));
 
-        column = column.add(cosmic::applet::padded_control(
-            widget::row::with_children(vec![input.into(), add.into()])
-                .align_y(Alignment::Center)
-                .spacing(8),
-        ));
+            rows.push(
+                widget::row::with_children(vec![input.into(), add.into()])
+                    .align_y(Alignment::Center)
+                    .spacing(8)
+                    .into(),
+            );
 
-        if let Some(err) = &self.add_error {
-            column = column.add(cosmic::applet::padded_control(
-                widget::text::caption(err.clone()),
-            ));
+            if let Some(err) = &self.add_error {
+                rows.push(widget::text::caption(err.clone()).into());
+            }
         }
 
-        let refresh = widget::button::text(if self.loading {
-            fl!("refreshing")
-        } else {
-            fl!("refresh")
-        })
-        .on_press_maybe((!self.loading).then_some(Message::Refresh));
+        // Footer: refresh, the CoinGecko link, and the edit toggle.
+        let refresh = widget::button::icon(widget::icon::from_name("view-refresh-symbolic"))
+            .extra_small()
+            .on_press_maybe((!self.loading).then_some(Message::Refresh));
 
-        let browse = widget::button::text(fl!("browse-all"))
+        let browse = widget::button::link(fl!("browse-all"))
+            .padding(0)
             .on_press(Message::OpenUrl("https://www.coingecko.com/".to_owned()));
 
-        column = column.add(
-            widget::row::with_children(vec![refresh.into(), widget::space::horizontal().into(), browse.into()])
-                .align_y(Alignment::Center),
+        let edit = widget::button::icon(widget::icon::from_name(if self.editing {
+            "object-select-symbolic"
+        } else {
+            "list-add-symbolic"
+        }))
+        .extra_small()
+        .on_press(Message::ToggleEdit);
+
+        rows.push(
+            widget::row::with_children(vec![
+                refresh.into(),
+                browse.into(),
+                widget::space::horizontal().into(),
+                edit.into(),
+            ])
+            .align_y(Alignment::Center)
+            .spacing(8)
+            .into(),
         );
 
-        self.core.applet.popup_container(column).into()
+        self.core
+            .applet
+            .popup_container(
+                widget::column::with_children(rows)
+                    .spacing(6)
+                    .padding(12),
+            )
+            .into()
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
@@ -400,14 +461,25 @@ impl cosmic::Application for AppModel {
                 }
             }
 
+            Message::ToggleEdit => {
+                self.editing = !self.editing;
+                self.add_error = None;
+                self.coin_input.clear();
+            }
+
             Message::RemoveCoin(slug) => {
                 let coins: Vec<String> = self
                     .config
-                    .coins
-                    .iter()
-                    .filter(|c| **c != slug)
-                    .cloned()
+                    .effective_coins()
+                    .into_iter()
+                    .filter(|c| *c != slug)
                     .collect();
+
+                // An empty list would leave the applet blank; keep the last coin.
+                if coins.is_empty() {
+                    self.add_error = Some(fl!("keep-one-coin"));
+                    return Task::none();
+                }
                 self.persist_coins(coins);
                 // Drop the row immediately rather than waiting for the next fetch.
                 self.quotes.retain(|q| q.id != slug);
@@ -417,6 +489,7 @@ impl cosmic::Application for AppModel {
                 self.loading = false;
                 match result {
                     Ok(quotes) if !quotes.is_empty() => {
+                        crypto::save_cache(&quotes);
                         self.quotes = quotes;
                         self.stale = false;
                         self.error = None;

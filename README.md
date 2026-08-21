@@ -13,9 +13,12 @@ SOL   ╱▔   $90.69     ▲ 4.40%
 Refresh
 ```
 
-Type a ticker, name, or CoinGecko id to start tracking a coin; **×** stops tracking
-one. The coin symbol links to its CoinGecko page, and **All coins** opens the full
-market list.
+The resting popup is just prices. The **+** button reveals the coin controls: a field
+that takes a ticker, name, or CoinGecko id, and an **×** per row to stop tracking one.
+The coin symbol links to its CoinGecko page, and **All coins** opens the market list.
+
+The last coin cannot be removed — an empty list would leave the applet blank, and a
+stored empty list is treated as unset so the defaults come back.
 
 ### Adding coins
 
@@ -103,8 +106,15 @@ text style is accepting the width that comes with it.
 
 ## Behaviour
 
+- **Startup costs no request.** The last good prices are cached under
+  `$XDG_CACHE_HOME/cosmic-applet-crypto/` and shown immediately; the network is only
+  touched if that cache is older than the refresh interval. Restarting the panel
+  therefore does not spend an API call, which is what turns a burst of restarts into
+  a rate limit.
 - **Failed refresh** — the last good prices stay on screen, marked `(stale)`, rather
   than the panel going blank.
+- **Rate limited (HTTP 429)** — reported as such, with the cached prices left in
+  place.
 - **Unknown coin id** — dropped from the list; every other coin still renders.
 - **Decimals scale with price**, so sub-dollar coins stay readable:
   `$77,283` · `$91.30` · `$0.0841`.
