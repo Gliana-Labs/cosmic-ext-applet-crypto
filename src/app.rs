@@ -442,30 +442,28 @@ impl cosmic::Application for AppModel {
                 .into(),
             ];
 
-            // Remove buttons only exist while editing, so the resting popup is not
-            // a wall of X's. The idle slot reserves the same box, so toggling edit
-            // mode moves nothing.
+            // Remove buttons appear only while editing. Nothing is reserved for
+            // them otherwise: a permanently empty column costs width every time the
+            // popup is opened, while the rows shifting costs only the moment the
+            // toggle is pressed, which the user just did on purpose.
             //
-            // Both go in a fixed-width container like every other cell in the row.
-            // As a bare Shrink-width child this was the only thing the layout could
-            // squeeze to nothing under width pressure, and it did.
-            let remove: Element<'_, Self::Message> = if self.editing {
-                widget::button::text("\u{2715}")
-                    .padding([0, row_spacing.space_xxs])
-                    .class(cosmic::theme::Button::Destructive)
-                    .on_press_maybe(can_remove.then(|| Message::RemoveCoin(quote.id.clone())))
-                    .into()
-            } else {
-                widget::space::horizontal()
-                    .height(Length::Fixed(REMOVE_SLOT))
-                    .into()
-            };
-
-            cells.push(
-                widget::container(remove)
+            // The cell is fixed-width like every other one in the row. As a bare
+            // Shrink child it was the only thing the layout could squeeze to zero,
+            // and it did, which is why it appeared to be missing entirely.
+            if self.editing {
+                cells.push(
+                    widget::container(
+                        widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                            .extra_small()
+                            .on_press_maybe(
+                                can_remove.then(|| Message::RemoveCoin(quote.id.clone())),
+                            ),
+                    )
                     .width(Length::Fixed(REMOVE_SLOT))
+                    .align_x(Alignment::Center)
                     .into(),
-            );
+                );
+            }
 
             column = column.add(
                 widget::row::with_children(cells)
