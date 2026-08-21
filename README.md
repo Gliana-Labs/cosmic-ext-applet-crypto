@@ -3,15 +3,19 @@
 Live cryptocurrency prices in the COSMIC™ desktop panel.
 
 ```
-▲ $77.3k ▲6.5%
-─────────────────────────────
-BTC   $77,283    ▲ 6.45%
-ETH   $2,418     ▲ 3.88%
-BNB   $675.91    ▲ 4.20%
-XRP   $1.37      ▲ 11.71%
-SOL   $91.30     ▲ 4.59%
+▲ $76.9k ▲6.4%
+──────────────────────────────────────
+BTC   ╱▔   $76,909    ▲ 6.40%
+ETH   ╱▔   $2,411     ▲ 4.20%
+BNB   ╱▔   $675.91    ▲ 4.20%
+XRP   ╱▔   $1.37      ▲ 11.71%
+SOL   ╱▔   $90.69     ▲ 4.40%
 Refresh
 ```
+
+Each row carries a 7-day sparkline, drawn green when the week closed up and red when
+it closed down — so a coin can show a green arrow for the day beside a red line for
+the week.
 
 COSMIC ships no crypto applet, and KDE Plasma widgets do not load in `cosmic-panel`.
 This is a native applet built on libcosmic.
@@ -89,8 +93,18 @@ text style is accepting the width that comes with it.
 
 ## Data source
 
-[CoinGecko](https://www.coingecko.com/en/api) `simple/price`. No API key. One request
-covers every tracked coin.
+[CoinGecko](https://www.coingecko.com/en/api) `coins/markets`. No API key. A single
+request returns the price, the 24h change, the ticker, and a 7-day sparkline for
+every tracked coin.
+
+Sparklines arrive as 168 hourly samples and are thinned to 48 points — more detail
+than a 56px-wide graph can render. The last sample is always kept so the line ends at
+the current price.
+
+Note that `coins/markets` computes `price_change_percentage_24h` against a different
+24h reference than `simple/price`, so the two endpoints report slightly different
+percentages for the same instant. Everything here comes from `coins/markets` so the
+figures stay self-consistent.
 
 Note that CoinGecko's edge rejects requests without a `User-Agent`, so the applet
 sets one explicitly.

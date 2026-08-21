@@ -6,9 +6,12 @@
 //! key. One request covers every tracked coin.
 
 use serde::Deserialize;
-use std::collections::HashMap;
 
-const API: &str = "https://api.coingecko.com/api/v3/simple/price";
+/// `coins/markets` returns price, 24h change, the ticker, and a 7-day sparkline in
+/// a single request. Using it for everything keeps the displayed numbers
+/// self-consistent — note its `price_change_percentage_24h` uses a different 24h
+/// reference than `simple/price`, so the two endpoints disagree slightly.
+const API: &str = "https://api.coingecko.com/api/v3/coins/markets";
 
 /// CoinGecko's edge rejects requests that arrive without a User-Agent, so one has to
 /// be set explicitly — reqwest sends none by default.
@@ -19,19 +22,36 @@ const USER_AGENT: &str = concat!(
     " (+https://github.com/Zetakai/cosmic-applet-crypto)"
 );
 
-/// One coin's price in the display currency, plus its 24h move.
+/// Sparkline points kept after downsampling. 168 hourly samples is far more detail
+/// than a 64px-wide graph can show.
+const SPARK_POINTS: usize = 48;
+
+/// One coin's price in the display currency, its 24h move, and a 7-day price series.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Quote {
     pub id: String,
     pub symbol: String,
     pub price: f64,
     pub change: Option<f64>,
+    /// Downsampled 7-day price series, oldest first. Empty if the API omitted it.
+    pub sparkline: Vec<f64>,
 }
 
-/// CoinGecko replies with `{"bitcoin": {"usd": 77000.0, "usd_24h_change": 6.3}}`,
-/// so the per-coin object is just a currency-keyed map.
 #[derive(Deserialize)]
-struct Raw(HashMap<String, HashMap<String, f64>>);
+struct Market {
+    id: String,
+    symbol: String,
+    current_price: Option<f64>,
+    price_change_percentage_24h: Option<f64>,
+    #[serde(default)]
+    sparkline_in_7d: Sparkline,
+}
+
+#[derive(Deserialize, Default)]
+struct Sparkline {
+    #[serde(default)]
+    price: Vec<f64>,
+}
 
 /// Fetches every coin in `ids` in a single request.
 ///
@@ -44,9 +64,8 @@ pub async fn fetch(ids: &[String], vs: &str) -> Result<Vec<Quote>, String> {
     }
 
     let url = format!(
-        "{API}?ids={}&vs_currencies={}&include_24hr_change=true",
-        ids.join(","),
-        vs
+        "{API}?vs_currency={vs}&ids={}&sparkline=true&price_change_percentage=24h",
+        ids.join(",")
     );
 
     let response = reqwest::Client::new()
@@ -61,21 +80,22 @@ pub async fn fetch(ids: &[String], vs: &str) -> Result<Vec<Quote>, String> {
         return Err(format!("CoinGecko returned {}", response.status()));
     }
 
-    let Raw(map) = response
-        .json::<Raw>()
+    let markets = response
+        .json::<Vec<Market>>()
         .await
         .map_err(|e| format!("could not parse response: {e}"))?;
 
-    let change_key = format!("{vs}_24h_change");
+    // Preserve the caller's ordering rather than the API's.
     let quotes = ids
         .iter()
         .filter_map(|id| {
-            let entry = map.get(id)?;
+            let market = markets.iter().find(|m| &m.id == id)?;
             Some(Quote {
                 id: id.clone(),
-                symbol: symbol_for(id),
-                price: *entry.get(vs)?,
-                change: entry.get(&change_key).copied(),
+                symbol: market.symbol.to_uppercase(),
+                price: market.current_price?,
+                change: market.price_change_percentage_24h,
+                sparkline: downsample(&market.sparkline_in_7d.price, SPARK_POINTS),
             })
         })
         .collect();
@@ -83,28 +103,65 @@ pub async fn fetch(ids: &[String], vs: &str) -> Result<Vec<Quote>, String> {
     Ok(quotes)
 }
 
-/// Maps common CoinGecko slugs to their ticker. Anything unmapped falls back to the
-/// uppercased slug, which is wrong-looking but never blank.
-pub fn symbol_for(id: &str) -> String {
-    match id {
-        "bitcoin" => "BTC",
-        "ethereum" => "ETH",
-        "binancecoin" => "BNB",
-        "ripple" => "XRP",
-        "solana" => "SOL",
-        "cardano" => "ADA",
-        "dogecoin" => "DOGE",
-        "polkadot" => "DOT",
-        "chainlink" => "LINK",
-        "litecoin" => "LTC",
-        "avalanche-2" => "AVAX",
-        "tron" => "TRX",
-        "cosmos" => "ATOM",
-        "tether" => "USDT",
-        "usd-coin" => "USDC",
-        other => return other.to_uppercase().replace('-', "_"),
+/// Evenly thins `values` to at most `target` points, always keeping the last one so
+/// the graph ends at the current price.
+fn downsample(values: &[f64], target: usize) -> Vec<f64> {
+    if values.len() <= target || target == 0 {
+        return values.to_vec();
     }
-    .to_owned()
+    let step = values.len() as f64 / target as f64;
+    let mut out: Vec<f64> = (0..target)
+        .map(|i| values[((i as f64 * step) as usize).min(values.len() - 1)])
+        .collect();
+    if let (Some(last), Some(actual)) = (out.last_mut(), values.last()) {
+        *last = *actual;
+    }
+    out
+}
+
+/// Renders a price series as a standalone SVG polyline, sized `width` x `height`.
+///
+/// Returned as bytes for `icon::from_svg_bytes`, which avoids pulling in the canvas
+/// feature just to draw a line. Colour tracks direction over the window, so it can
+/// differ from the 24h arrow — a coin can be up on the day and down on the week.
+pub fn sparkline_svg(prices: &[f64], width: u32, height: u32) -> Option<Vec<u8>> {
+    if prices.len() < 2 {
+        return None;
+    }
+
+    let min = prices.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = prices.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if !min.is_finite() || !max.is_finite() {
+        return None;
+    }
+
+    // Inset by the stroke width so the line is never clipped at the edges.
+    let stroke = 1.5_f64;
+    let span = (max - min).max(f64::EPSILON);
+    let usable_h = f64::from(height) - stroke * 2.0;
+    let usable_w = f64::from(width) - stroke * 2.0;
+
+    let points: Vec<String> = prices
+        .iter()
+        .enumerate()
+        .map(|(i, price)| {
+            let x = stroke + usable_w * (i as f64) / ((prices.len() - 1) as f64);
+            // SVG y grows downward, so the highest price maps to the smallest y.
+            let y = stroke + usable_h * (1.0 - (price - min) / span);
+            format!("{x:.2},{y:.2}")
+        })
+        .collect();
+
+    let rising = prices.last() >= prices.first();
+    let colour = if rising { "#4ade80" } else { "#f87171" };
+
+    Some(
+        format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}"><polyline points="{}" fill="none" stroke="{colour}" stroke-width="{stroke}" stroke-linecap="round" stroke-linejoin="round"/></svg>"#,
+            points.join(" ")
+        )
+        .into_bytes(),
+    )
 }
 
 /// Currency symbol for the display currency, falling back to the uppercased code.
@@ -210,9 +267,58 @@ mod tests {
     }
 
     #[test]
-    fn unmapped_ids_fall_back_to_uppercase() {
-        assert_eq!(symbol_for("bitcoin"), "BTC");
-        assert_eq!(symbol_for("some-new-coin"), "SOME_NEW_COIN");
+    fn downsample_thins_but_keeps_the_latest_value() {
+        let series: Vec<f64> = (0..168).map(f64::from).collect();
+        let thinned = downsample(&series, 48);
+        assert_eq!(thinned.len(), 48);
+        assert_eq!(thinned[0], 0.0, "should start at the oldest sample");
+        assert_eq!(*thinned.last().unwrap(), 167.0, "must end at the current price");
+    }
+
+    #[test]
+    fn downsample_leaves_short_series_alone() {
+        let series = vec![1.0, 2.0, 3.0];
+        assert_eq!(downsample(&series, 48), series);
+    }
+
+    #[test]
+    fn sparkline_needs_at_least_two_points() {
+        assert!(sparkline_svg(&[], 56, 18).is_none());
+        assert!(sparkline_svg(&[1.0], 56, 18).is_none());
+        assert!(sparkline_svg(&[1.0, 2.0], 56, 18).is_some());
+    }
+
+    #[test]
+    fn sparkline_stays_inside_its_viewbox() {
+        let series = vec![10.0, 50.0, 30.0, 70.0, 20.0];
+        let svg = String::from_utf8(sparkline_svg(&series, 56, 18).unwrap()).unwrap();
+        let points = svg
+            .split("points=\"")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .expect("polyline points");
+
+        for pair in points.split_whitespace() {
+            let (x, y) = pair.split_once(',').expect("x,y pair");
+            let (x, y): (f64, f64) = (x.parse().unwrap(), y.parse().unwrap());
+            assert!((0.0..=56.0).contains(&x), "x {x} outside viewBox");
+            assert!((0.0..=18.0).contains(&y), "y {y} outside viewBox");
+        }
+    }
+
+    #[test]
+    fn sparkline_colour_tracks_direction() {
+        let up = String::from_utf8(sparkline_svg(&[1.0, 5.0], 56, 18).unwrap()).unwrap();
+        let down = String::from_utf8(sparkline_svg(&[5.0, 1.0], 56, 18).unwrap()).unwrap();
+        assert!(up.contains("#4ade80"), "rising series should be green");
+        assert!(down.contains("#f87171"), "falling series should be red");
+    }
+
+    /// A flat series has zero range; the divide must not produce NaN coordinates.
+    #[test]
+    fn sparkline_survives_a_flat_series() {
+        let svg = String::from_utf8(sparkline_svg(&[42.0; 10], 56, 18).unwrap()).unwrap();
+        assert!(!svg.contains("NaN"), "flat series produced NaN: {svg}");
     }
 
     /// Hits the live CoinGecko API. Run with `cargo test -- --ignored --nocapture`.
@@ -225,15 +331,36 @@ mod tests {
             .collect();
         let quotes = fetch(&ids, "usd").await.expect("live fetch failed");
         assert_eq!(quotes.len(), 3, "expected one quote per requested id");
+
         for q in &quotes {
             assert!(q.price > 0.0, "{} had a non-positive price", q.symbol);
+            assert!(
+                !q.sparkline.is_empty(),
+                "{} came back with no sparkline series",
+                q.symbol
+            );
+            assert!(
+                q.sparkline.len() <= SPARK_POINTS,
+                "{} sparkline was not downsampled: {} points",
+                q.symbol,
+                q.sparkline.len()
+            );
             println!(
-                "{:<5} {}{:<12} {}",
+                "{:<5} {}{:<12} {:<10} {} spark points",
                 q.symbol,
                 currency_prefix("usd"),
                 format_amount(q.price),
-                q.change.map(|c| format_change(c, false)).unwrap_or_default()
+                q.change.map(|c| format_change(c, false)).unwrap_or_default(),
+                q.sparkline.len()
             );
+
+            // Write one out large so the rendered shape can be eyeballed.
+            if q.id == "bitcoin" {
+                let svg = sparkline_svg(&q.sparkline, 240, 72).expect("svg");
+                std::fs::write("/tmp/btc-sparkline.svg", &svg).ok();
+                let small = sparkline_svg(&q.sparkline, 56, 18).expect("svg");
+                std::fs::write("/tmp/btc-sparkline-56.svg", &small).ok();
+            }
         }
     }
 

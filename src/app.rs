@@ -12,6 +12,10 @@ use cosmic::widget;
 /// Panel icon, recoloured by the panel theme.
 const PANEL_ICON: &str = "io.github.zetakai.CosmicAppletCrypto-symbolic";
 
+/// Sparkline dimensions in the popup.
+const SPARK_WIDTH: u32 = 56;
+const SPARK_HEIGHT: u32 = 18;
+
 pub struct AppModel {
     core: cosmic::Core,
     popup: Option<Id>,
@@ -197,10 +201,28 @@ impl cosmic::Application for AppModel {
                 .map(|c| crypto::format_change(c, false))
                 .unwrap_or_default();
 
+            // A 7-day sparkline, drawn as generated SVG so no canvas feature is
+            // needed. Not symbolic: its colour carries the trend direction and must
+            // survive theming.
+            let spark: Element<'_, Self::Message> =
+                match crypto::sparkline_svg(&quote.sparkline, SPARK_WIDTH, SPARK_HEIGHT) {
+                    // from_svg_bytes yields a non-symbolic handle, so the stroke
+                    // colour in the generated SVG is preserved rather than themed.
+                    Some(bytes) => widget::icon(widget::icon::from_svg_bytes(bytes))
+                        .width(Length::Fixed(f32::from(SPARK_WIDTH as u16)))
+                        .height(Length::Fixed(f32::from(SPARK_HEIGHT as u16)))
+                        .into(),
+                    // Keep the column aligned when a coin has no series.
+                    None => widget::space::horizontal()
+                        .width(Length::Fixed(f32::from(SPARK_WIDTH as u16)))
+                        .into(),
+                };
+
             let row = widget::row::with_children(vec![
                 widget::text::body(quote.symbol.clone())
-                    .width(Length::Fixed(64.0))
+                    .width(Length::Fixed(56.0))
                     .into(),
+                spark,
                 widget::text::body(price).width(Length::Fill).into(),
                 widget::text::body(change).into(),
             ])
