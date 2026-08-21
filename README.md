@@ -1,4 +1,4 @@
-# cbar-markets
+# cbar-crypto
 
 Live cryptocurrency prices in the COSMIC™ desktop panel, as a [cbar](https://github.com/alexandreprates/cbar) plugin.
 
@@ -29,11 +29,11 @@ this rides on cbar, which already solves panel rendering, scheduling and popup a
 ## Install
 
 ```bash
-git clone https://github.com/<you>/cbar-markets.git
-install -m 0755 cbar-markets/plugins/markets.60s.sh ~/.config/cbar/plugins/
+git clone https://github.com/<you>/cbar-crypto.git
+install -m 0755 cbar-crypto/plugins/crypto.60s.sh ~/.config/cbar/plugins/
 ```
 
-The `60s` in the filename is cbar's refresh interval — rename to `markets.5m.sh` for a
+The `60s` in the filename is cbar's refresh interval — rename to `crypto.5m.sh` for a
 slower poll.
 
 ## Configuration
@@ -42,22 +42,22 @@ All settings are optional. Put them in `~/.config/cbar/env`:
 
 ```sh
 # CoinGecko coin ids — the lowercase slug from the coingecko.com URL
-CBAR_MKT_IDS="bitcoin,ethereum,binancecoin,ripple,solana"
+CBAR_CRYPTO_IDS="bitcoin,ethereum,binancecoin,ripple,solana"
 
 # Yahoo Finance tickers. Leave empty (the default) for crypto only.
-CBAR_MKT_STOCKS=""
+CBAR_CRYPTO_STOCKS=""
 
 # Fiat currencies. The first is what the panel label shows; any others
 # appear as indented rows under each coin.
-CBAR_MKT_VS="usd"
+CBAR_CRYPTO_VS="usd"
 
 # Which coin id or stock ticker the panel label tracks.
-CBAR_MKT_PANEL="bitcoin"
+CBAR_CRYPTO_PANEL="bitcoin"
 ```
 
 ### Multiple currencies
 
-`CBAR_MKT_VS="usd,idr"` renders:
+`CBAR_CRYPTO_VS="usd,idr"` renders:
 
 ```
 BTC   $77,008    ▲ 6.30%
@@ -66,7 +66,7 @@ BTC   $77,008    ▲ 6.30%
 
 ### Stocks
 
-`CBAR_MKT_STOCKS="HOOD,AAPL"` appends a stock section, quoted from Yahoo Finance.
+`CBAR_CRYPTO_STOCKS="HOOD,AAPL"` appends a stock section, quoted from Yahoo Finance.
 Percentages are computed against the previous close, so they sit flat while markets
 are shut.
 

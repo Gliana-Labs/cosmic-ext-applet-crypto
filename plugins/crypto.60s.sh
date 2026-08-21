@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# cbar plugin: crypto prices (CoinGecko) + stock quotes (Yahoo Finance). No API keys required.
+# cbar-crypto: crypto prices (CoinGecko) + stock quotes (Yahoo Finance). No API keys required.
 #
 # Configure in ~/.config/cbar/env:
-#   CBAR_MKT_IDS="bitcoin,ethereum,binancecoin,ripple,solana"  # CoinGecko coin ids
-#   CBAR_MKT_STOCKS="HOOD,AAPL"                                 # Yahoo tickers; empty = crypto only
-#   CBAR_MKT_VS="usd"                                          # fiat currencies; first shows in the panel
-#   CBAR_MKT_PANEL="bitcoin"                                   # coin id or stock ticker for the panel label
+#   CBAR_CRYPTO_IDS="bitcoin,ethereum,binancecoin,ripple,solana"  # CoinGecko coin ids
+#   CBAR_CRYPTO_STOCKS="HOOD,AAPL"                                 # Yahoo tickers; empty = crypto only
+#   CBAR_CRYPTO_VS="usd"                                          # fiat currencies; first shows in the panel
+#   CBAR_CRYPTO_PANEL="bitcoin"                                   # coin id or stock ticker for the panel label
 
 set -uo pipefail
 
-IDS="${CBAR_MKT_IDS:-bitcoin,ethereum,binancecoin,ripple,solana}"
-STOCKS="${CBAR_MKT_STOCKS-}"
-VS="${CBAR_MKT_VS:-usd}"
-PANEL_KEY="${CBAR_MKT_PANEL:-${IDS%%,*}}"
+IDS="${CBAR_CRYPTO_IDS:-bitcoin,ethereum,binancecoin,ripple,solana}"
+STOCKS="${CBAR_CRYPTO_STOCKS-}"
+VS="${CBAR_CRYPTO_VS:-usd}"
+PANEL_KEY="${CBAR_CRYPTO_PANEL:-${IDS%%,*}}"
 
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/cbar"
 COIN_CACHE="$CACHE_DIR/markets-coins.json"
