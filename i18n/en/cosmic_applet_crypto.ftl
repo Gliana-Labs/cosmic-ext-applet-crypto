@@ -10,3 +10,4 @@ example-row = Example Row
 refresh = Refresh
 refreshing = Refreshing…
 stale = (stale)
+browse-all = All coins

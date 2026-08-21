@@ -39,6 +39,10 @@ pub enum Message {
     Refresh,
     /// A fetch finished, successfully or not.
     Fetched(Result<Vec<Quote>, String>),
+    /// Hand a URL to the desktop's default handler.
+    OpenUrl(String),
+    /// A spawned side effect finished and needs no state change.
+    Ignore,
 }
 
 impl AppModel {
@@ -229,17 +233,30 @@ impl cosmic::Application for AppModel {
             .align_y(Alignment::Center)
             .spacing(8);
 
-            column = column.add(row);
+            // The whole row opens the coin's CoinGecko page, matching what the shell
+            // plugin offered through href=.
+            column = column.add(
+                cosmic::applet::menu_button(row).on_press(Message::OpenUrl(format!(
+                    "https://www.coingecko.com/en/coins/{}",
+                    quote.id
+                ))),
+            );
         }
 
-        let footer = widget::button::text(if self.loading {
+        let refresh = widget::button::text(if self.loading {
             fl!("refreshing")
         } else {
             fl!("refresh")
         })
         .on_press_maybe((!self.loading).then_some(Message::Refresh));
 
-        column = column.add(footer);
+        let browse = widget::button::text(fl!("browse-all"))
+            .on_press(Message::OpenUrl("https://www.coingecko.com/".to_owned()));
+
+        column = column.add(
+            widget::row::with_children(vec![refresh.into(), widget::space::horizontal().into(), browse.into()])
+                .align_y(Alignment::Center),
+        );
 
         self.core.applet.popup_container(column).into()
     }
@@ -256,6 +273,20 @@ impl cosmic::Application for AppModel {
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
             Message::Refresh => return self.refresh(),
+
+            // tokio::process reaps the child; std::process::Command would leave a
+            // zombie behind on every click.
+            Message::OpenUrl(url) => {
+                return cosmic::task::future(async move {
+                    let _ = tokio::process::Command::new("xdg-open")
+                        .arg(&url)
+                        .status()
+                        .await;
+                    Message::Ignore
+                });
+            }
+
+            Message::Ignore => {}
 
             Message::Fetched(result) => {
                 self.loading = false;

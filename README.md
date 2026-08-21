@@ -13,6 +13,9 @@ SOL   ╱▔   $90.69     ▲ 4.40%
 Refresh
 ```
 
+Every row is clickable and opens that coin's CoinGecko page; **All coins** at the
+bottom opens the full market list.
+
 Each row carries a 7-day sparkline, drawn green when the week closed up and red when
 it closed down — so a coin can show a green arrow for the day beside a red line for
 the week.
