@@ -20,10 +20,6 @@ const SPIN_STEP: f32 = 0.22;
 /// How long the confirmation tick stays up once a refresh lands.
 const CONFIRM_FOR: Duration = Duration::from_millis(1200);
 
-/// Width held open where the remove button appears, so rows keep their geometry
-/// when the edit toggle is pressed.
-const REMOVE_SLOT_WIDTH: f32 = 24.0;
-
 /// Sparkline dimensions in the popup.
 const SPARK_WIDTH: u32 = 56;
 const SPARK_HEIGHT: u32 = 18;
@@ -277,9 +273,7 @@ impl cosmic::Application for AppModel {
         let mut column = widget::list_column();
 
         if let Some(error) = &self.error {
-            column = column.add(cosmic::applet::padded_control(
-                widget::text::caption(error.clone()),
-            ));
+            column = column.add(widget::text::caption(error.clone()));
         }
 
         for quote in &self.quotes {
@@ -339,16 +333,20 @@ impl cosmic::Application for AppModel {
                     .on_press_maybe(can_remove.then(|| Message::RemoveCoin(quote.id.clone())))
                     .into()
             } else {
+                // Hold the slot open so rows keep their geometry across the toggle.
+                // 16px glyph plus the button's padding on both sides.
                 widget::space::horizontal()
-                    .width(Length::Fixed(REMOVE_SLOT_WIDTH))
+                    .width(Length::Fixed(f32::from(
+                        16 + 2 * cosmic::theme::spacing().space_xxs,
+                    )))
                     .into()
             });
 
-            column = column.add(cosmic::applet::padded_control(
+            column = column.add(
                 widget::row::with_children(cells)
                     .align_y(Alignment::Center)
                     .spacing(8),
-            ));
+            );
         }
 
         if self.editing {
@@ -364,58 +362,55 @@ impl cosmic::Application for AppModel {
             })
             .on_press_maybe((!self.validating).then_some(Message::AddCoin));
 
-            column = column.add(cosmic::applet::padded_control(
+            column = column.add(
                 widget::row::with_children(vec![input.into(), add.into()])
                     .align_y(Alignment::Center)
                     .spacing(8),
-            ));
+            );
 
             if let Some(err) = &self.add_error {
-                column = column.add(cosmic::applet::padded_control(
-                    widget::text::caption(err.clone()),
-                ));
+                column = column.add(widget::text::caption(err.clone()));
             }
         }
+
+        // Every footer icon button is built the same way so none of them changes
+        // size between states — mixing button::icon with button::custom made the
+        // row jump the moment the spinner started.
+        let icon_pad = cosmic::theme::spacing().space_xxs;
+        let icon_button = |name: &'static str, angle: f32, msg: Option<Message>| {
+            widget::button::custom(
+                widget::icon(widget::icon::from_name(name).handle())
+                    .size(16)
+                    // Floating turns the glyph without disturbing the layout.
+                    .rotation(Rotation::Floating(Radians(angle))),
+            )
+            .class(cosmic::theme::Button::Icon)
+            .padding(icon_pad)
+            .on_press_maybe(msg)
+        };
 
         // Three states so a press is visibly acknowledged: the icon spins while the
         // request is in flight, flashes a tick when it lands, then settles back.
         let refresh: Element<'_, Self::Message> = if self.loading {
-            // Rotation lives on the Icon widget rather than the Handle, so this one
-            // is built as a custom button instead of button::icon. Not pressable
-            // while in flight, which also prevents stacking requests.
-            widget::button::custom(
-                widget::icon(widget::icon::from_name("view-refresh-symbolic").handle())
-                    .size(16)
-                    // Floating keeps the layout fixed while the glyph turns.
-                    .rotation(Rotation::Floating(Radians(self.spin))),
-            )
-            .class(cosmic::theme::Button::Icon)
-            .into()
+            // No message while in flight, which also prevents stacking requests.
+            icon_button("view-refresh-symbolic", self.spin, None).into()
         } else if self.showing_confirmation() {
-            widget::button::icon(widget::icon::from_name("object-select-symbolic"))
-                .extra_small()
-                .on_press(Message::Refresh)
-                .into()
+            icon_button("object-select-symbolic", 0.0, Some(Message::Refresh)).into()
         } else {
-            widget::button::icon(widget::icon::from_name("view-refresh-symbolic"))
-                .extra_small()
-                .on_press(Message::Refresh)
-                .into()
+            icon_button("view-refresh-symbolic", 0.0, Some(Message::Refresh)).into()
         };
 
         let browse = widget::button::link(fl!("browse-all"))
             .padding(0)
             .on_press(Message::OpenUrl("https://www.coingecko.com/".to_owned()));
 
-        let edit = widget::button::icon(widget::icon::from_name(if self.editing {
-            "object-select-symbolic"
-        } else {
-            "document-edit-symbolic"
-        }))
-        .extra_small()
-        .on_press(Message::ToggleEdit);
+        let edit = icon_button(
+            if self.editing { "object-select-symbolic" } else { "document-edit-symbolic" },
+            0.0,
+            Some(Message::ToggleEdit),
+        );
 
-        column = column.add(cosmic::applet::padded_control(
+        column = column.add(
             widget::row::with_children(vec![
                 refresh,
                 browse.into(),
@@ -424,7 +419,7 @@ impl cosmic::Application for AppModel {
             ])
             .align_y(Alignment::Center)
             .spacing(8),
-        ));
+        );
 
         self.core.applet.popup_container(column).into()
     }
