@@ -1,4 +1,4 @@
-# cbar-crypto
+# cbar-crypto-market
 
 Live cryptocurrency prices in the COSMIC™ desktop panel, as a [cbar](https://github.com/alexandreprates/cbar) plugin.
 
@@ -29,8 +29,8 @@ this rides on cbar, which already solves panel rendering, scheduling and popup a
 ## Install
 
 ```bash
-git clone https://github.com/<you>/cbar-crypto.git
-install -m 0755 cbar-crypto/plugins/crypto.60s.sh ~/.config/cbar/plugins/
+git clone https://github.com/<you>/cbar-crypto-market.git
+install -m 0755 cbar-crypto-market/plugins/crypto.60s.sh ~/.config/cbar/plugins/
 ```
 
 The `60s` in the filename is cbar's refresh interval — rename to `crypto.5m.sh` for a
