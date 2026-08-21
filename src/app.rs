@@ -50,6 +50,9 @@ fn srgba_to_hex(c: cosmic::cosmic_theme::palette::Srgba) -> String {
     )
 }
 
+/// Symbolic icon size used by the extra-small button preset.
+const REMOVE_ICON_SIZE: u16 = 16;
+
 /// Arrows sit in their own narrow column so they align down the list; the value
 /// column is wide enough for the realistic worst case, "-99.9%".
 const ARROW_COL_WIDTH: f32 = 14.0;
@@ -332,6 +335,7 @@ impl cosmic::Application for AppModel {
         let up_hex = srgba_to_hex(palette.success.base);
         let down_hex = srgba_to_hex(palette.destructive.base);
 
+        let row_spacing = cosmic::theme::spacing();
         let prefix = crypto::currency_prefix(&self.config.currency);
         let can_remove = self.quotes.len() > 1;
 
@@ -438,6 +442,10 @@ impl cosmic::Application for AppModel {
             cells.push(if self.editing {
                 widget::button::icon(widget::icon::from_name("window-close-symbolic"))
                     .extra_small()
+                    // extra_small pads all four sides, which made the button taller
+                    // than the row's text and grew every row on entering edit mode.
+                    // Horizontal padding only, so row height is unchanged.
+                    .padding([0, row_spacing.space_xxs])
                     .on_press_maybe(can_remove.then(|| Message::RemoveCoin(quote.id.clone())))
                     .into()
             } else {
@@ -445,7 +453,7 @@ impl cosmic::Application for AppModel {
                 // 16px glyph plus the button's padding on both sides.
                 widget::space::horizontal()
                     .width(Length::Fixed(f32::from(
-                        16 + 2 * cosmic::theme::spacing().space_xxs,
+                        REMOVE_ICON_SIZE + 2 * row_spacing.space_xxs,
                     )))
                     .into()
             });
@@ -461,15 +469,16 @@ impl cosmic::Application for AppModel {
             // button::standard is a fixed space_l tall while text_input sizes itself
             // from its padding, so the two do not line up by default. The input's
             // vertical padding is derived from that height to match it.
-            let spacing = cosmic::theme::spacing();
-            let field_height = spacing.space_l;
+            // space_l (32) is taller than 20px text needs; space_m keeps the row
+            // compact while still clearing the text and its focus ring.
+            let field_height = row_spacing.space_m;
             let vertical_pad = field_height.saturating_sub(FIELD_LINE_HEIGHT) / 2;
 
             let input = widget::text_input(fl!("coin-placeholder"), &self.coin_input)
                 .on_input(Message::CoinInputChanged)
                 .on_submit(|_| Message::AddCoin)
                 .size(FIELD_FONT_SIZE)
-                .padding([vertical_pad, spacing.space_xs])
+                .padding([vertical_pad, row_spacing.space_xs])
                 .width(Length::Fill);
 
             let add = widget::button::standard(if self.validating {
