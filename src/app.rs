@@ -439,12 +439,17 @@ impl cosmic::Application for AppModel {
             ];
 
             // Remove buttons only exist while editing, so the resting popup is not
-            // a wall of X's. The idle slot reserves the button's full size — width
-            // and height — so toggling edit mode moves nothing: overriding the
-            // button's own padding to match the row instead made it fail to render.
+            // a wall of X's. The idle slot reserves the same box so toggling edit
+            // mode moves nothing.
+            //
+            // The glyph is text rather than a themed icon: icon::from_name resolves
+            // through the icon theme at runtime and gives back nothing visible when
+            // the lookup misses, which fails silently and looks like a missing
+            // feature. A character always draws.
             cells.push(if self.editing {
-                widget::button::icon(widget::icon::from_name("window-close-symbolic"))
-                    .extra_small()
+                widget::button::text("\u{2715}")
+                    .padding([0, row_spacing.space_xxs])
+                    .class(cosmic::theme::Button::Destructive)
                     .on_press_maybe(can_remove.then(|| Message::RemoveCoin(quote.id.clone())))
                     .into()
             } else {
