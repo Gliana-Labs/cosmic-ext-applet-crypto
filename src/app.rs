@@ -20,6 +20,15 @@ pub struct AppModel {
     core: cosmic::Core,
     popup: Option<Id>,
     config: Config,
+    /// Handle used to persist config changes. None if cosmic-config was unavailable,
+    /// in which case edits apply for this session only.
+    config_handle: Option<cosmic_config::Config>,
+    /// Contents of the add-coin field.
+    coin_input: String,
+    /// Set while a typed slug is being checked against the API.
+    validating: bool,
+    /// Why the last add attempt failed, shown under the field.
+    add_error: Option<String>,
     /// Latest successful quotes. Retained across failed refreshes so the panel keeps
     /// showing the last known prices rather than going blank.
     quotes: Vec<Quote>,
@@ -41,6 +50,14 @@ pub enum Message {
     Fetched(Result<Vec<Quote>, String>),
     /// Hand a URL to the desktop's default handler.
     OpenUrl(String),
+    /// The add-coin field changed.
+    CoinInputChanged(String),
+    /// Check the typed slug against the API before storing it.
+    AddCoin,
+    /// Result of that check: the canonical slug, or why it failed.
+    CoinValidated(Result<String, String>),
+    /// Stop tracking a coin.
+    RemoveCoin(String),
     /// A spawned side effect finished and needs no state change.
     Ignore,
 }
@@ -77,6 +94,19 @@ impl AppModel {
         })
     }
 
+    /// Writes the coin list through cosmic-config so it survives a restart. Without
+    /// a handle the change still applies, just only for this session.
+    fn persist_coins(&mut self, coins: Vec<String>) {
+        match self.config_handle.as_ref() {
+            Some(handle) => {
+                if let Err(err) = self.config.set_coins(handle, coins) {
+                    self.add_error = Some(format!("could not save: {err}"));
+                }
+            }
+            None => self.config.coins = coins,
+        }
+    }
+
     /// Kicks off a fetch for every configured coin.
     fn refresh(&mut self) -> Task<cosmic::Action<Message>> {
         if self.loading {
@@ -105,8 +135,10 @@ impl cosmic::Application for AppModel {
     }
 
     fn init(core: cosmic::Core, _flags: Self::Flags) -> (Self, Task<cosmic::Action<Self::Message>>) {
-        let config = cosmic_config::Config::new(Self::APP_ID, Config::VERSION)
-            .map(|context| match Config::get_entry(&context) {
+        let config_handle = cosmic_config::Config::new(Self::APP_ID, Config::VERSION).ok();
+        let config = config_handle
+            .as_ref()
+            .map(|context| match Config::get_entry(context) {
                 Ok(config) => config,
                 Err((_errors, config)) => config,
             })
@@ -116,6 +148,10 @@ impl cosmic::Application for AppModel {
             core,
             popup: None,
             config,
+            config_handle,
+            coin_input: String::new(),
+            validating: false,
+            add_error: None,
             quotes: Vec::new(),
             stale: false,
             error: None,
@@ -222,25 +258,58 @@ impl cosmic::Application for AppModel {
                         .into(),
                 };
 
+            // Only the symbol navigates. With a remove button in the same row, a
+            // whole-row target would turn a near-miss on the X into an opened
+            // browser tab, and a link ought to look like one.
+            let symbol = widget::button::link(quote.symbol.clone())
+                .padding(0)
+                .on_press(Message::OpenUrl(format!(
+                    "https://www.coingecko.com/en/coins/{}",
+                    quote.id
+                )));
+
             let row = widget::row::with_children(vec![
-                widget::text::body(quote.symbol.clone())
+                widget::container(symbol)
                     .width(Length::Fixed(56.0))
                     .into(),
                 spark,
                 widget::text::body(price).width(Length::Fill).into(),
                 widget::text::body(change).into(),
+                widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                    .extra_small()
+                    .on_press(Message::RemoveCoin(quote.id.clone()))
+                    .into(),
             ])
             .align_y(Alignment::Center)
             .spacing(8);
 
-            // The whole row opens the coin's CoinGecko page, matching what the shell
-            // plugin offered through href=.
-            column = column.add(
-                cosmic::applet::menu_button(row).on_press(Message::OpenUrl(format!(
-                    "https://www.coingecko.com/en/coins/{}",
-                    quote.id
-                ))),
-            );
+            column = column.add(cosmic::applet::padded_control(row));
+        }
+
+        // Add-coin field. Submitting on Enter as well as the button, since typing a
+        // slug then reaching for the mouse is the slower path.
+        let input = widget::text_input(fl!("coin-placeholder"), &self.coin_input)
+            .on_input(Message::CoinInputChanged)
+            .on_submit(|_| Message::AddCoin)
+            .width(Length::Fill);
+
+        let add = widget::button::standard(if self.validating {
+            fl!("checking")
+        } else {
+            fl!("add-coin")
+        })
+        .on_press_maybe((!self.validating).then_some(Message::AddCoin));
+
+        column = column.add(cosmic::applet::padded_control(
+            widget::row::with_children(vec![input.into(), add.into()])
+                .align_y(Alignment::Center)
+                .spacing(8),
+        ));
+
+        if let Some(err) = &self.add_error {
+            column = column.add(cosmic::applet::padded_control(
+                widget::text::caption(err.clone()),
+            ));
         }
 
         let refresh = widget::button::text(if self.loading {
@@ -287,6 +356,62 @@ impl cosmic::Application for AppModel {
             }
 
             Message::Ignore => {}
+
+            Message::CoinInputChanged(value) => {
+                self.coin_input = value;
+                self.add_error = None;
+            }
+
+            Message::AddCoin => {
+                let query = self.coin_input.trim().to_owned();
+                if query.is_empty() {
+                    return Task::none();
+                }
+
+                // Resolve before storing, so a typo surfaces here rather than as a
+                // silently missing row. resolve() also accepts a ticker or a name,
+                // since almost nobody knows CoinGecko's internal slugs.
+                self.validating = true;
+                self.add_error = None;
+                let currency = self.config.currency.clone();
+                let tracked = self.config.coins.clone();
+
+                return cosmic::task::future(async move {
+                    let result = match crypto::resolve(&query, &currency).await {
+                        Ok(slug) if tracked.contains(&slug) => Err(fl!("already-tracked")),
+                        Ok(slug) => Ok(slug),
+                        Err(_) => Err(fl!("unknown-coin")),
+                    };
+                    Message::CoinValidated(result)
+                });
+            }
+
+            Message::CoinValidated(result) => {
+                self.validating = false;
+                match result {
+                    Ok(slug) => {
+                        let mut coins = self.config.coins.clone();
+                        coins.push(slug);
+                        self.persist_coins(coins);
+                        self.coin_input.clear();
+                        return self.refresh();
+                    }
+                    Err(err) => self.add_error = Some(err),
+                }
+            }
+
+            Message::RemoveCoin(slug) => {
+                let coins: Vec<String> = self
+                    .config
+                    .coins
+                    .iter()
+                    .filter(|c| **c != slug)
+                    .cloned()
+                    .collect();
+                self.persist_coins(coins);
+                // Drop the row immediately rather than waiting for the next fetch.
+                self.quotes.retain(|q| q.id != slug);
+            }
 
             Message::Fetched(result) => {
                 self.loading = false;

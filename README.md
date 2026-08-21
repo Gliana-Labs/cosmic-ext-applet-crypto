@@ -13,8 +13,25 @@ SOL   ╱▔   $90.69     ▲ 4.40%
 Refresh
 ```
 
-Every row is clickable and opens that coin's CoinGecko page; **All coins** at the
-bottom opens the full market list.
+Type a ticker, name, or CoinGecko id to start tracking a coin; **×** stops tracking
+one. The coin symbol links to its CoinGecko page, and **All coins** opens the full
+market list.
+
+### Adding coins
+
+The field accepts whichever you happen to know:
+
+| You type | Tracks |
+|---|---|
+| `btc` | bitcoin |
+| `ADA` | cardano |
+| `hbar` | hedera-hashgraph |
+| `cardano` | cardano |
+
+The input is checked as a CoinGecko id first, and only falls back to search if that
+finds nothing. Search results are ranked by market cap with an exact ticker match
+preferred, so `btc` resolves to Bitcoin rather than to a wrapped derivative that
+merely contains the string. A typo is rejected before anything is saved.
 
 Each row carries a 7-day sparkline, drawn green when the week closed up and red when
 it closed down — so a coin can show a green arrow for the day beside a red line for

@@ -103,6 +103,81 @@ pub async fn fetch(ids: &[String], vs: &str) -> Result<Vec<Quote>, String> {
     Ok(quotes)
 }
 
+/// Resolves whatever the user typed into a CoinGecko slug.
+///
+/// Tries the input as a slug first, since that is exact and costs one request. Only
+/// if that finds nothing does it fall back to search, which lets people type the
+/// ticker they actually know (`btc`, `ada`) or a display name rather than having to
+/// look up CoinGecko's internal id.
+pub async fn resolve(query: &str, vs: &str) -> Result<String, String> {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return Err("nothing to add".to_owned());
+    }
+
+    let as_slug = query.replace(' ', "-");
+    if let Ok(quotes) = fetch(std::slice::from_ref(&as_slug), vs).await {
+        if !quotes.is_empty() {
+            return Ok(as_slug);
+        }
+    }
+
+    let url = format!("https://api.coingecko.com/api/v3/search?query={query}");
+    let response = reqwest::Client::new()
+        .get(&url)
+        .header(reqwest::header::USER_AGENT, USER_AGENT)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| format!("search failed: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("CoinGecko returned {}", response.status()));
+    }
+
+    let results = response
+        .json::<SearchResults>()
+        .await
+        .map_err(|e| format!("could not parse search: {e}"))?;
+
+    pick_best_match(&results.coins, &query).ok_or_else(|| "no such coin".to_owned())
+}
+
+#[derive(Deserialize, Default)]
+struct SearchResults {
+    #[serde(default)]
+    coins: Vec<SearchCoin>,
+}
+
+#[derive(Deserialize, Clone)]
+struct SearchCoin {
+    id: String,
+    symbol: String,
+    market_cap_rank: Option<u32>,
+}
+
+/// Prefers an exact ticker match, then an exact id match, then whatever ranks highest
+/// by market cap. Searching `btc` should land on Bitcoin, not on a wrapped derivative
+/// that happens to contain the string.
+fn pick_best_match(coins: &[SearchCoin], query: &str) -> Option<String> {
+    // Unranked coins sort last rather than first.
+    let rank = |c: &SearchCoin| c.market_cap_rank.unwrap_or(u32::MAX);
+
+    let exact_symbol = coins
+        .iter()
+        .filter(|c| c.symbol.to_lowercase() == query)
+        .min_by_key(|c| rank(c));
+    if let Some(c) = exact_symbol {
+        return Some(c.id.clone());
+    }
+
+    if let Some(c) = coins.iter().find(|c| c.id.to_lowercase() == query) {
+        return Some(c.id.clone());
+    }
+
+    coins.iter().min_by_key(|c| rank(c)).map(|c| c.id.clone())
+}
+
 /// Evenly thins `values` to at most `target` points, always keeping the last one so
 /// the graph ends at the current price.
 fn downsample(values: &[f64], target: usize) -> Vec<f64> {
@@ -364,6 +439,34 @@ mod tests {
         }
     }
 
+    /// Exercises the real resolver against the live API.
+    #[tokio::test]
+    #[ignore]
+    async fn resolve_accepts_slugs_tickers_and_names() {
+        for (input, expected) in [
+            ("bitcoin", "bitcoin"),
+            ("btc", "bitcoin"),
+            ("BTC", "bitcoin"),
+            ("ada", "cardano"),
+            ("hbar", "hedera-hashgraph"),
+        ] {
+            let got = resolve(input, "usd").await;
+            assert_eq!(
+                got.as_deref(),
+                Ok(expected),
+                "resolving {input:?} gave {got:?}"
+            );
+            println!("{input:>8} -> {expected}");
+        }
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn resolve_rejects_nonsense() {
+        let got = resolve("zzzznotacoin", "usd").await;
+        assert!(got.is_err(), "expected an error, got {got:?}");
+    }
+
     #[tokio::test]
     #[ignore]
     async fn unknown_id_is_skipped_not_fatal() {
@@ -374,6 +477,43 @@ mod tests {
         let quotes = fetch(&ids, "usd").await.expect("fetch failed");
         assert_eq!(quotes.len(), 1, "unknown id should be dropped, not fatal");
         assert_eq!(quotes[0].symbol, "BTC");
+    }
+
+    fn coin(id: &str, symbol: &str, rank: Option<u32>) -> SearchCoin {
+        SearchCoin { id: id.to_owned(), symbol: symbol.to_owned(), market_cap_rank: rank }
+    }
+
+    #[test]
+    fn exact_ticker_beats_a_higher_ranked_partial_match() {
+        // Searching "btc" must not land on a wrapped derivative.
+        let coins = vec![
+            coin("bitget-wrapped-btc", "BGBTC", Some(316)),
+            coin("bitcoin", "BTC", Some(1)),
+        ];
+        assert_eq!(pick_best_match(&coins, "btc").as_deref(), Some("bitcoin"));
+    }
+
+    #[test]
+    fn exact_ticker_picks_the_largest_by_market_cap() {
+        let coins = vec![
+            coin("fake-ada", "ADA", Some(9000)),
+            coin("cardano", "ADA", Some(18)),
+        ];
+        assert_eq!(pick_best_match(&coins, "ada").as_deref(), Some("cardano"));
+    }
+
+    #[test]
+    fn unranked_coins_do_not_win_by_default() {
+        let coins = vec![
+            coin("obscure", "OBS", None),
+            coin("solana", "SOL", Some(7)),
+        ];
+        assert_eq!(pick_best_match(&coins, "sol").as_deref(), Some("solana"));
+    }
+
+    #[test]
+    fn empty_search_results_yield_nothing() {
+        assert!(pick_best_match(&[], "btc").is_none());
     }
 
     #[test]
