@@ -61,23 +61,12 @@ const REMOVE_CELL: f32 = REMOVE_SLOT + 8.0;
 
 /// Arrows sit in their own narrow column so they align down the list; the value
 /// column is wide enough for the realistic worst case, "-99.9%".
-/// Width of the add-coin field. Kept under the coin rows' width so they, not it,
-/// determine how wide the popup is.
-const ADD_FIELD_WIDTH: f32 = 170.0;
-
 /// Gap between cells in a coin row.
 const ROW_CELL_SPACING: u16 = 6;
 
 const SYMBOL_COL_WIDTH: f32 = 44.0;
 const ARROW_COL_WIDTH: f32 = 14.0;
 const CHANGE_COL_WIDTH: f32 = 46.0;
-
-/// Rough advance width of the popup's body font, used to size the price column to
-/// its content. Approximate is fine: the column is padded either way.
-const CHAR_WIDTH: f32 = 8.5;
-
-/// Floor for the price column so short prices still leave the numbers aligned.
-const MIN_PRICE_CHARS: usize = 9;
 
 /// Matches button::standard's own text metrics so the add field lines up with it.
 const FIELD_FONT_SIZE: u16 = 14;
@@ -353,23 +342,6 @@ impl cosmic::Application for AppModel {
         let prefix = crypto::currency_prefix(&self.config.currency);
         let can_remove = self.quotes.len() > 1;
 
-        // Size the price column to the widest value actually on screen rather than
-        // filling the popup. A Fill column would pin the popup to its maximum width
-        // regardless of content; this way a list of ordinary coins stays narrow and
-        // only widens for something like SHIB at eight decimals, or IDR prices.
-        let price_strings: Vec<String> = self
-            .quotes
-            .iter()
-            .map(|q| format!("{prefix}{}", crypto::format_amount(q.price)))
-            .collect();
-        let price_width = price_strings
-            .iter()
-            .map(|p| p.chars().count())
-            .max()
-            .unwrap_or(0)
-            .max(MIN_PRICE_CHARS) as f32
-            * CHAR_WIDTH;
-
         let mut column = widget::list_column();
 
         if let Some(error) = &self.error {
@@ -417,7 +389,11 @@ impl cosmic::Application for AppModel {
                     widget::text::body(format!("{prefix}{}", crypto::format_amount(quote.price)))
                         .align_x(Alignment::End),
                 )
-                .width(Length::Fixed(price_width))
+                // Fill: this column takes whatever slack the row has, which puts the
+                // numbers against the right edge and leaves no dead space there.
+                // Everything else in the row is fixed, so what remains is ample even
+                // for the widest realistic price.
+                .width(Length::Fill)
                 .into(),
                 // Arrow and percentage occupy separate fixed columns. Rendered as
                 // one right-aligned string the arrows drift horizontally, because
@@ -476,7 +452,8 @@ impl cosmic::Application for AppModel {
             column = column.add(
                 widget::row::with_children(cells)
                     .align_y(Alignment::Center)
-                    .spacing(ROW_CELL_SPACING),
+                    .spacing(ROW_CELL_SPACING)
+                    .width(Length::Fill),
             );
         }
 
@@ -494,9 +471,7 @@ impl cosmic::Application for AppModel {
                 .on_submit(|_| Message::AddCoin)
                 .size(FIELD_FONT_SIZE)
                 .padding([vertical_pad, row_spacing.space_xs])
-                // Fixed rather than Fill: a Fill child pins the popup to its maximum
-                // width, which then leaves every coin row short of the edge.
-                .width(Length::Fixed(ADD_FIELD_WIDTH));
+                .width(Length::Fill);
 
             let add = widget::button::standard(if self.validating {
                 fl!("checking")
@@ -556,13 +531,13 @@ impl cosmic::Application for AppModel {
         );
 
         column = column.add(
-            // No Fill spacer here either, for the same reason.
             widget::row::with_children(vec![
                 refresh,
                 widget::text::caption(
                     self.freshness_label().unwrap_or_else(|| fl!("never-updated")),
                 )
                 .into(),
+                widget::space::horizontal().into(),
                 browse.into(),
                 edit.into(),
             ])
@@ -734,8 +709,12 @@ impl cosmic::Application for AppModel {
                     // needs eight decimals, and a high-denomination currency like
                     // IDR renders prices such as Rp1,360,446,498.
                     popup_settings.positioner.size_limits = Limits::NONE
-                        .max_width(500.0)
-                        .min_width(300.0)
+                        // Rows fill the popup, so it settles at this width. Chosen to
+                        // clear the widest realistic row — Bitcoin in a
+                        // high-denomination currency, in edit mode — without being
+                        // wider than the content ever needs.
+                        .max_width(420.0)
+                        .min_width(320.0)
                         .min_height(100.0)
                         .max_height(1080.0);
                     get_popup(popup_settings)
