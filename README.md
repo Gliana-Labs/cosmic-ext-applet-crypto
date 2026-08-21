@@ -29,7 +29,7 @@ this rides on cbar, which already solves panel rendering, scheduling and popup a
 ## Install
 
 ```bash
-git clone https://github.com/<you>/cbar-crypto-market.git
+git clone https://github.com/Zetakai/cbar-crypto-market.git
 install -m 0755 cbar-crypto-market/plugins/crypto.60s.sh ~/.config/cbar/plugins/
 ```
 
