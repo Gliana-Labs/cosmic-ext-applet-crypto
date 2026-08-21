@@ -1,114 +1,97 @@
-# cbar-crypto-market
+# cosmic-applet-crypto
 
-Live cryptocurrency prices in the COSMIC™ desktop panel, as a [cbar](https://github.com/alexandreprates/cbar) plugin.
-
-Optionally quotes stocks too.
+Live cryptocurrency prices in the COSMIC™ desktop panel.
 
 ```
-BTC $77,008 ▲ 6.30%
+▲ $77.3k ▲6.5%
 ─────────────────────────────
-BTC   $77,008    ▲ 6.30%
-ETH   $2,412     ▲ 3.95%
-BNB   $674.62    ▲ 3.99%
-XRP   $1.37      ▲ 11.01%
-SOL   $91.05     ▲ 4.33%
+BTC   $77,283    ▲ 6.45%
+ETH   $2,418     ▲ 3.88%
+BNB   $675.91    ▲ 4.20%
+XRP   $1.37      ▲ 11.71%
+SOL   $91.30     ▲ 4.59%
 Refresh
 ```
 
-## Why a cbar plugin
-
-COSMIC has no crypto applet — the community applet collection has none, and KDE Plasma
-widgets don't load in `cosmic-panel`. Rather than ship another standalone Rust binary,
-this rides on cbar, which already solves panel rendering, scheduling and popup actions.
-
-## Requirements
-
-- [cbar](https://github.com/alexandreprates/cbar) installed and added to your COSMIC panel
-- `curl` and `jq`
+COSMIC ships no crypto applet, and KDE Plasma widgets do not load in `cosmic-panel`.
+This is a native applet built on libcosmic.
 
 ## Install
 
+### Native applet (recommended)
+
+Requires a Rust toolchain.
+
 ```bash
-git clone https://github.com/Zetakai/cbar-crypto-market.git
-install -m 0755 cbar-crypto-market/plugins/crypto.60s.sh ~/.config/cbar/plugins/
+git clone https://github.com/Zetakai/cosmic-applet-crypto.git
+cd cosmic-applet-crypto
+just build-release
+just install
 ```
 
-The `60s` in the filename is cbar's refresh interval — rename to `crypto.5m.sh` for a
-slower poll.
+Then add it in **Settings → Desktop → Panel → Add applet → Crypto**. Log out and back
+in if it does not appear immediately.
+
+### cbar plugin (no compiler needed)
+
+If you already run [cbar](https://github.com/alexandreprates/cbar), `plugins/crypto.60s.sh`
+does the same job as a shell script. It needs `curl` and `jq`.
+
+```bash
+./install.sh
+```
+
+Configure it through `~/.config/cbar/env` — see the comments at the top of the script.
 
 ## Configuration
 
-All settings are optional. Put them in `~/.config/cbar/env`:
+The applet stores settings via `cosmic-config` at
+`~/.config/cosmic/io.github.zetakai.CosmicAppletCrypto/v1/`.
 
-```sh
-# CoinGecko coin ids — the lowercase slug from the coingecko.com URL
-CBAR_CRYPTO_IDS="bitcoin,ethereum,binancecoin,ripple,solana"
-
-# Yahoo Finance tickers. Leave empty (the default) for crypto only.
-CBAR_CRYPTO_STOCKS=""
-
-# Fiat currencies. The first is what the panel label shows; any others
-# appear as indented rows under each coin.
-CBAR_CRYPTO_VS="usd"
-
-# Which coin id or stock ticker the panel label tracks.
-CBAR_CRYPTO_PANEL="bitcoin"
-
-# How much detail the panel label carries. Panel width is scarce.
-CBAR_CRYPTO_PANEL_STYLE="icon"
-```
+| Key | Default | Meaning |
+|---|---|---|
+| `coins` | `["bitcoin","ethereum","binancecoin","ripple","solana"]` | CoinGecko slugs — the lowercase name from the coingecko.com URL |
+| `currency` | `"usd"` | Fiat code prices are quoted in |
+| `panel_coin` | `"bitcoin"` | Which coin the panel label tracks |
+| `panel_style` | `Icon` | `Icon`, `Compact`, `Minimal`, or `Full` |
+| `refresh_secs` | `60` | Seconds between refreshes, clamped to 30–3600 |
 
 ### Panel width
 
-The panel label is the one part that costs you screen space, so it is tunable
-independently of the popup, which always shows full precision.
+The panel label is the only part that costs screen space, so it is tuned separately
+from the popup, which always shows full precision.
 
-| `CBAR_CRYPTO_PANEL_STYLE` | Renders | Width |
+| `panel_style` | Renders | Width |
 |---|---|---|
-| `icon` (default) | symbolic trend glyph + `$77.1k ▲6.3%` | 12 chars + icon |
-| `compact` | `$77.1k ▲6.3%` | 12 chars |
-| `minimal` | `$77.1k` | 6 chars |
-| `full` | `BTC $77,081 ▲ 6.28%` | 19 chars |
-
-The glyph is an inline symbolic SVG recoloured by the panel theme, so it tracks
-light and dark automatically.
-
-### Multiple currencies
-
-`CBAR_CRYPTO_VS="usd,idr"` renders:
-
-```
-BTC   $77,008    ▲ 6.30%
-      Rp1,360,446,498
-```
-
-### Stocks
-
-`CBAR_CRYPTO_STOCKS="HOOD,AAPL"` appends a stock section, quoted from Yahoo Finance.
-Percentages are computed against the previous close, so they sit flat while markets
-are shut.
-
-## Data sources
-
-| Source | Used for | Key | Notes |
-|---|---|---|---|
-| [CoinGecko](https://www.coingecko.com/en/api) `simple/price` | crypto | none | Public tier is rate limited; the 60s default is well inside it |
-| Yahoo Finance `v8/finance/chart` | stocks | none | Undocumented endpoint — it can change without notice |
+| `Icon` (default) | icon + `$77.3k ▲6.5%` | 12 chars + icon |
+| `Compact` | `$77.3k ▲6.5%` | 12 chars |
+| `Minimal` | `$77.3k` | 6 chars |
+| `Full` | `BTC $77,283 ▲ 6.45%` | 19 chars |
 
 ## Behaviour
 
-- **Offline** — the last good response is cached under `$XDG_CACHE_HOME/cbar/` and
-  re-rendered with a `(stale)` marker, so the panel label never goes blank.
-- **No cache and no network** — shows `markets n/a` with a Retry action.
-- **Unknown symbol** — that one row reads `no data`; every other row still renders.
+- **Failed refresh** — the last good prices stay on screen, marked `(stale)`, rather
+  than the panel going blank.
+- **Unknown coin id** — dropped from the list; every other coin still renders.
 - **Decimals scale with price**, so sub-dollar coins stay readable:
-  `$77,008` · `$91.05` · `$0.0841`.
+  `$77,283` · `$91.30` · `$0.0841`.
+- **Rate limiting** — `refresh_secs` is clamped to a 30s floor so a bad config cannot
+  hammer the public API.
 
-## Adding a coin
+## Data source
 
-Use the slug from the CoinGecko URL — `coingecko.com/en/coins/`**`cardano`** → `cardano`.
-Tickers for common coins are mapped in `symbol_for()`; anything unmapped falls back to
-the uppercased id.
+[CoinGecko](https://www.coingecko.com/en/api) `simple/price`. No API key. One request
+covers every tracked coin.
+
+Note that CoinGecko's edge rejects requests without a `User-Agent`, so the applet
+sets one explicitly.
+
+## Development
+
+```bash
+cargo test                          # formatting and parsing
+cargo test -- --ignored --nocapture # live API check, hits the network
+```
 
 ## License
 
