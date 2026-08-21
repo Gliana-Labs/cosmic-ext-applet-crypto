@@ -5,12 +5,24 @@ use crate::crypto::{self, Quote};
 use crate::fl;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::platform_specific::shell::wayland::commands::popup::{destroy_popup, get_popup};
-use cosmic::iced::{time, window::Id, Alignment, Length, Limits, Subscription};
+use cosmic::iced::{time, window::Id, Alignment, Length, Limits, Radians, Rotation, Subscription};
+use std::time::{Duration, Instant};
 use cosmic::prelude::*;
 use cosmic::widget;
 
 /// Panel icon, recoloured by the panel theme.
 const PANEL_ICON: &str = "io.github.zetakai.CosmicAppletCrypto-symbolic";
+
+/// How often the spinner advances, and by how much per tick.
+const SPIN_INTERVAL: Duration = Duration::from_millis(40);
+const SPIN_STEP: f32 = 0.22;
+
+/// How long the confirmation tick stays up once a refresh lands.
+const CONFIRM_FOR: Duration = Duration::from_millis(1200);
+
+/// Width held open where the remove button appears, so rows keep their geometry
+/// when the edit toggle is pressed.
+const REMOVE_SLOT_WIDTH: f32 = 24.0;
 
 /// Sparkline dimensions in the popup.
 const SPARK_WIDTH: u32 = 56;
@@ -29,6 +41,10 @@ pub struct AppModel {
     validating: bool,
     /// Why the last add attempt failed, shown under the field.
     add_error: Option<String>,
+    /// Current angle of the spinning refresh icon, in radians.
+    spin: f32,
+    /// When the last refresh completed, used to flash a tick briefly afterwards.
+    refreshed_at: Option<Instant>,
     /// Whether the coin-management controls are showing. Kept off by default so the
     /// popup is just prices until editing is actually wanted.
     editing: bool,
@@ -63,6 +79,8 @@ pub enum Message {
     RemoveCoin(String),
     /// Show or hide the coin-management controls.
     ToggleEdit,
+    /// Advance the refresh spinner.
+    SpinTick,
     /// A spawned side effect finished and needs no state change.
     Ignore,
 }
@@ -110,6 +128,12 @@ impl AppModel {
             }
             None => self.config.coins = coins,
         }
+    }
+
+    /// How long the tick shows after a refresh lands.
+    fn showing_confirmation(&self) -> bool {
+        self.refreshed_at
+            .is_some_and(|at| at.elapsed() < CONFIRM_FOR)
     }
 
     /// Kicks off a fetch for every configured coin.
@@ -172,6 +196,8 @@ impl cosmic::Application for AppModel {
             validating: false,
             add_error: None,
             editing: false,
+            spin: 0.0,
+            refreshed_at: None,
             stale: cache_age.is_some_and(|age| age >= interval),
             quotes,
             error: None,
@@ -248,10 +274,12 @@ impl cosmic::Application for AppModel {
     fn view_window(&self, _id: Id) -> Element<'_, Self::Message> {
         let prefix = crypto::currency_prefix(&self.config.currency);
         let can_remove = self.quotes.len() > 1;
-        let mut rows: Vec<Element<'_, Self::Message>> = Vec::new();
+        let mut column = widget::list_column();
 
         if let Some(error) = &self.error {
-            rows.push(widget::text::caption(error.clone()).into());
+            column = column.add(cosmic::applet::padded_control(
+                widget::text::caption(error.clone()),
+            ));
         }
 
         for quote in &self.quotes {
@@ -280,12 +308,8 @@ impl cosmic::Application for AppModel {
                         .into(),
                 };
 
-            // Price and change stack tight against each other on the right so the
-            // numbers read as one unit rather than two drifting columns.
             let mut cells: Vec<Element<'_, Self::Message>> = vec![
-                widget::container(symbol)
-                    .width(Length::Fixed(46.0))
-                    .into(),
+                widget::container(symbol).width(Length::Fixed(48.0)).into(),
                 spark,
                 widget::container(
                     widget::text::body(format!("{prefix}{}", crypto::format_amount(quote.price)))
@@ -294,7 +318,7 @@ impl cosmic::Application for AppModel {
                 .width(Length::Fill)
                 .into(),
                 widget::container(
-                    widget::text::caption(
+                    widget::text::body(
                         quote
                             .change
                             .map(|c| crypto::format_change(c, true))
@@ -302,29 +326,29 @@ impl cosmic::Application for AppModel {
                     )
                     .align_x(Alignment::End),
                 )
-                .width(Length::Fixed(52.0))
+                .width(Length::Fixed(56.0))
                 .into(),
             ];
 
             // Remove buttons only exist while editing, so the resting popup is not
-            // a wall of X's.
-            if self.editing {
-                cells.push(
-                    widget::button::icon(widget::icon::from_name("window-close-symbolic"))
-                        .extra_small()
-                        .on_press_maybe(
-                            can_remove.then(|| Message::RemoveCoin(quote.id.clone())),
-                        )
-                        .into(),
-                );
-            }
+            // a wall of X's. The row keeps its geometry either way: the slot is held
+            // open by a spacer so rows do not jump when the toggle is pressed.
+            cells.push(if self.editing {
+                widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+                    .extra_small()
+                    .on_press_maybe(can_remove.then(|| Message::RemoveCoin(quote.id.clone())))
+                    .into()
+            } else {
+                widget::space::horizontal()
+                    .width(Length::Fixed(REMOVE_SLOT_WIDTH))
+                    .into()
+            });
 
-            rows.push(
+            column = column.add(cosmic::applet::padded_control(
                 widget::row::with_children(cells)
                     .align_y(Alignment::Center)
-                    .spacing(8)
-                    .into(),
-            );
+                    .spacing(8),
+            ));
         }
 
         if self.editing {
@@ -340,22 +364,44 @@ impl cosmic::Application for AppModel {
             })
             .on_press_maybe((!self.validating).then_some(Message::AddCoin));
 
-            rows.push(
+            column = column.add(cosmic::applet::padded_control(
                 widget::row::with_children(vec![input.into(), add.into()])
                     .align_y(Alignment::Center)
-                    .spacing(8)
-                    .into(),
-            );
+                    .spacing(8),
+            ));
 
             if let Some(err) = &self.add_error {
-                rows.push(widget::text::caption(err.clone()).into());
+                column = column.add(cosmic::applet::padded_control(
+                    widget::text::caption(err.clone()),
+                ));
             }
         }
 
-        // Footer: refresh, the CoinGecko link, and the edit toggle.
-        let refresh = widget::button::icon(widget::icon::from_name("view-refresh-symbolic"))
-            .extra_small()
-            .on_press_maybe((!self.loading).then_some(Message::Refresh));
+        // Three states so a press is visibly acknowledged: the icon spins while the
+        // request is in flight, flashes a tick when it lands, then settles back.
+        let refresh: Element<'_, Self::Message> = if self.loading {
+            // Rotation lives on the Icon widget rather than the Handle, so this one
+            // is built as a custom button instead of button::icon. Not pressable
+            // while in flight, which also prevents stacking requests.
+            widget::button::custom(
+                widget::icon(widget::icon::from_name("view-refresh-symbolic").handle())
+                    .size(16)
+                    // Floating keeps the layout fixed while the glyph turns.
+                    .rotation(Rotation::Floating(Radians(self.spin))),
+            )
+            .class(cosmic::theme::Button::Icon)
+            .into()
+        } else if self.showing_confirmation() {
+            widget::button::icon(widget::icon::from_name("object-select-symbolic"))
+                .extra_small()
+                .on_press(Message::Refresh)
+                .into()
+        } else {
+            widget::button::icon(widget::icon::from_name("view-refresh-symbolic"))
+                .extra_small()
+                .on_press(Message::Refresh)
+                .into()
+        };
 
         let browse = widget::button::link(fl!("browse-all"))
             .padding(0)
@@ -364,40 +410,40 @@ impl cosmic::Application for AppModel {
         let edit = widget::button::icon(widget::icon::from_name(if self.editing {
             "object-select-symbolic"
         } else {
-            "list-add-symbolic"
+            "document-edit-symbolic"
         }))
         .extra_small()
         .on_press(Message::ToggleEdit);
 
-        rows.push(
+        column = column.add(cosmic::applet::padded_control(
             widget::row::with_children(vec![
-                refresh.into(),
+                refresh,
                 browse.into(),
                 widget::space::horizontal().into(),
                 edit.into(),
             ])
             .align_y(Alignment::Center)
-            .spacing(8)
-            .into(),
-        );
+            .spacing(8),
+        ));
 
-        self.core
-            .applet
-            .popup_container(
-                widget::column::with_children(rows)
-                    .spacing(6)
-                    .padding(12),
-            )
-            .into()
+        self.core.applet.popup_container(column).into()
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        Subscription::batch(vec![
+        let mut subscriptions = vec![
             time::every(self.config.refresh_interval()).map(|_| Message::Refresh),
             self.core()
                 .watch_config::<Config>(Self::APP_ID)
                 .map(|update| Message::UpdateConfig(update.config)),
-        ])
+        ];
+
+        // Only tick while there is something to animate: a spinning icon, or a
+        // confirmation tick waiting to time out. Otherwise the applet sits idle.
+        if self.loading || self.showing_confirmation() {
+            subscriptions.push(time::every(SPIN_INTERVAL).map(|_| Message::SpinTick));
+        }
+
+        Subscription::batch(subscriptions)
     }
 
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
@@ -417,6 +463,12 @@ impl cosmic::Application for AppModel {
             }
 
             Message::Ignore => {}
+
+            Message::SpinTick => {
+                if self.loading {
+                    self.spin = (self.spin + SPIN_STEP) % std::f32::consts::TAU;
+                }
+            }
 
             Message::CoinInputChanged(value) => {
                 self.coin_input = value;
@@ -487,6 +539,8 @@ impl cosmic::Application for AppModel {
 
             Message::Fetched(result) => {
                 self.loading = false;
+                self.spin = 0.0;
+                self.refreshed_at = Some(Instant::now());
                 match result {
                     Ok(quotes) if !quotes.is_empty() => {
                         crypto::save_cache(&quotes);

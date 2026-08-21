@@ -13,6 +13,9 @@ SOL   ╱▔   $90.69     ▲ 4.40%
 Refresh
 ```
 
+Refreshing is visible: the icon spins while the request is in flight and flashes a
+tick when it lands, so a press is always acknowledged.
+
 The resting popup is just prices. The **+** button reveals the coin controls: a field
 that takes a ticker, name, or CoinGecko id, and an **×** per row to stop tracking one.
 The coin symbol links to its CoinGecko page, and **All coins** opens the market list.
