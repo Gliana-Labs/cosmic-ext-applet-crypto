@@ -5,30 +5,81 @@
   <project_license>MIT</project_license>
   <name>Cosmic Applet Crypto</name>
   <summary>Live cryptocurrency prices in the COSMIC panel</summary>
-  <icon type="remote" width="64" height="64" scale="1">
-    https://github.com/Zetakai/cosmic-applet-crypto/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
-  </icon>
-  <url type="vcs-browser">https://github.com/Zetakai/cosmic-applet-crypto</url>
+
+  <developer id="io.github.zetakai">
+    <name>Zetakai</name>
+  </developer>
+
+  <description>
+    <p>
+      Shows live cryptocurrency prices in the COSMIC panel. The panel carries one
+      coin's price at a glance; the popup lists every coin you track with its 24h
+      change and a seven-day sparkline.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Track any coin listed on CoinGecko, added by ticker, name, or id</li>
+      <li>Seven-day price sparkline on every row</li>
+      <li>Prices in any fiat currency CoinGecko quotes</li>
+      <li>Panel label detail is adjustable, down to an icon alone on vertical panels</li>
+      <li>Prices are cached, so a restart shows the last known figures immediately</li>
+      <li>No API key and no account required</li>
+    </ul>
+    <p>
+      Price data comes from the CoinGecko public API. The applet contacts
+      api.coingecko.com and nothing else.
+    </p>
+  </description>
+
   <launchable type="desktop-id">io.github.zetakai.CosmicAppletCrypto.desktop</launchable>
+
+  <url type="homepage">https://github.com/Zetakai/cosmic-applet-crypto</url>
+  <url type="bugtracker">https://github.com/Zetakai/cosmic-applet-crypto/issues</url>
+  <url type="vcs-browser">https://github.com/Zetakai/cosmic-applet-crypto</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Tracked coins with their 24h change and seven-day trend</caption>
+      <image>https://raw.githubusercontent.com/Zetakai/cosmic-applet-crypto/main/resources/screenshots/popup.png</image>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="0.1.0" date="2026-08-22">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+
   <provides>
     <id>com.system76.CosmicApplet</id>
     <binaries>
       <binary>cosmic-applet-crypto</binary>
     </binaries>
   </provides>
+
   <requires>
     <display_length compare="ge">360</display_length>
   </requires>
+
   <supports>
     <control>keyboard</control>
     <control>pointing</control>
     <control>touch</control>
   </supports>
+
   <categories>
     <category>COSMIC</category>
   </categories>
+
   <keywords>
     <keyword>COSMIC</keyword>
+    <keyword>crypto</keyword>
+    <keyword>cryptocurrency</keyword>
+    <keyword>bitcoin</keyword>
+    <keyword>price</keyword>
   </keywords>
+
   <content_rating type="oars-1.1" />
 </component>

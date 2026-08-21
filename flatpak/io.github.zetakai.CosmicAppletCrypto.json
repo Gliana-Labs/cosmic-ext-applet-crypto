@@ -1,0 +1,49 @@
+{
+  "app-id": "io.github.zetakai.CosmicAppletCrypto",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "25.08",
+  "sdk": "org.freedesktop.Sdk",
+  "sdk-extensions": ["org.freedesktop.Sdk.Extension.rust-stable"],
+  "base": "com.system76.Cosmic.BaseApp",
+  "base-version": "stable",
+  "command": "cosmic-applet-crypto",
+  "finish-args": [
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--share=ipc",
+    "--device=dri",
+    "--filesystem=xdg-config/cosmic:rw",
+    "--talk-name=com.system76.CosmicSettingsDaemon",
+    "--share=network"
+  ],
+  "build-options": {
+    "append-path": "/usr/lib/sdk/rust-stable/bin",
+    "env": {
+      "CARGO_HOME": "/run/build/cosmic-applet-crypto/cargo"
+    }
+  },
+  "modules": [
+    {
+      "name": "cosmic-applet-crypto",
+      "buildsystem": "simple",
+      "build-commands": [
+        "cargo --offline fetch --manifest-path Cargo.toml --verbose",
+        "cargo --offline build --release --verbose",
+        "install -Dm0755 ./target/release/cosmic-applet-crypto /app/bin/cosmic-applet-crypto",
+        "install -Dm0644 ./target/xdgen/app.desktop /app/share/applications/io.github.zetakai.CosmicAppletCrypto.desktop",
+        "install -Dm0644 ./target/xdgen/app.metainfo.xml /app/share/metainfo/io.github.zetakai.CosmicAppletCrypto.metainfo.xml",
+        "install -Dm0644 ./resources/icons/hicolor/scalable/apps/io.github.zetakai.CosmicAppletCrypto.svg /app/share/icons/hicolor/scalable/apps/io.github.zetakai.CosmicAppletCrypto.svg",
+        "install -Dm0644 ./resources/icons/hicolor/scalable/apps/io.github.zetakai.CosmicAppletCrypto-symbolic.svg /app/share/icons/hicolor/scalable/apps/io.github.zetakai.CosmicAppletCrypto-symbolic.svg"
+      ],
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/Zetakai/cosmic-applet-crypto.git",
+          "tag": "REPLACE_WITH_TAG",
+          "commit": "REPLACE_WITH_COMMIT"
+        },
+        "cargo-sources.json"
+      ]
+    }
+  ]
+}
