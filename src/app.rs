@@ -13,6 +13,17 @@ use cosmic::widget;
 /// Panel icon, recoloured by the panel theme.
 const PANEL_ICON: &str = "io.github.zetakai.CosmicAppletCrypto-symbolic";
 
+/// Rough advance width of the popup's body font, used to size the price column to
+/// its content. Approximate is fine: the column is padded either way.
+const CHAR_WIDTH: f32 = 8.5;
+
+/// Floor for the price column so short prices still leave the numbers aligned.
+const MIN_PRICE_CHARS: usize = 9;
+
+/// Matches button::standard's own text metrics so the add field lines up with it.
+const FIELD_FONT_SIZE: u16 = 14;
+const FIELD_LINE_HEIGHT: u16 = 20;
+
 /// How often the spinner advances, and by how much per tick.
 const SPIN_INTERVAL: Duration = Duration::from_millis(40);
 const SPIN_STEP: f32 = 0.22;
@@ -270,6 +281,24 @@ impl cosmic::Application for AppModel {
     fn view_window(&self, _id: Id) -> Element<'_, Self::Message> {
         let prefix = crypto::currency_prefix(&self.config.currency);
         let can_remove = self.quotes.len() > 1;
+
+        // Size the price column to the widest value actually on screen rather than
+        // filling the popup. A Fill column would pin the popup to its maximum width
+        // regardless of content; this way a list of ordinary coins stays narrow and
+        // only widens for something like SHIB at eight decimals, or IDR prices.
+        let price_strings: Vec<String> = self
+            .quotes
+            .iter()
+            .map(|q| format!("{prefix}{}", crypto::format_amount(q.price)))
+            .collect();
+        let price_width = price_strings
+            .iter()
+            .map(|p| p.chars().count())
+            .max()
+            .unwrap_or(0)
+            .max(MIN_PRICE_CHARS) as f32
+            * CHAR_WIDTH;
+
         let mut column = widget::list_column();
 
         if let Some(error) = &self.error {
@@ -309,7 +338,7 @@ impl cosmic::Application for AppModel {
                     widget::text::body(format!("{prefix}{}", crypto::format_amount(quote.price)))
                         .align_x(Alignment::End),
                 )
-                .width(Length::Fill)
+                .width(Length::Fixed(price_width))
                 .into(),
                 widget::container(
                     widget::text::body(
@@ -350,9 +379,18 @@ impl cosmic::Application for AppModel {
         }
 
         if self.editing {
+            // button::standard is a fixed space_l tall while text_input sizes itself
+            // from its padding, so the two do not line up by default. The input's
+            // vertical padding is derived from that height to match it.
+            let spacing = cosmic::theme::spacing();
+            let field_height = spacing.space_l;
+            let vertical_pad = field_height.saturating_sub(FIELD_LINE_HEIGHT) / 2;
+
             let input = widget::text_input(fl!("coin-placeholder"), &self.coin_input)
                 .on_input(Message::CoinInputChanged)
                 .on_submit(|_| Message::AddCoin)
+                .size(FIELD_FONT_SIZE)
+                .padding([vertical_pad, spacing.space_xs])
                 .width(Length::Fill);
 
             let add = widget::button::standard(if self.validating {
@@ -360,6 +398,7 @@ impl cosmic::Application for AppModel {
             } else {
                 fl!("add-coin")
             })
+            .height(Length::Fixed(f32::from(field_height)))
             .on_press_maybe((!self.validating).then_some(Message::AddCoin));
 
             column = column.add(
@@ -580,8 +619,12 @@ impl cosmic::Application for AppModel {
                         None,
                         None,
                     );
+                    // The popup sizes to its content between these bounds. The upper
+                    // one has to clear the widest realistic row: a sub-cent coin
+                    // needs eight decimals, and a high-denomination currency like
+                    // IDR renders prices such as Rp1,360,446,498.
                     popup_settings.positioner.size_limits = Limits::NONE
-                        .max_width(372.0)
+                        .max_width(500.0)
                         .min_width(300.0)
                         .min_height(100.0)
                         .max_height(1080.0);

@@ -331,6 +331,21 @@ pub fn format_amount(value: f64) -> String {
 
     let rendered = format!("{:.*}", decimals, magnitude);
     let (integer, fraction) = match rendered.split_once('.') {
+        // Sub-cent coins are padded out to eight decimals, most of which are
+        // usually zeros; trimming them keeps the column narrow without losing any
+        // significant digits. The two-decimal range keeps its zeros so prices in a
+        // normal range stay aligned with each other.
+        Some((i, f)) if decimals >= 4 => {
+            let trimmed = f.trim_end_matches('0');
+            (
+                i.to_owned(),
+                if trimmed.is_empty() {
+                    String::new()
+                } else {
+                    format!(".{trimmed}")
+                },
+            )
+        }
         Some((i, f)) => (i.to_owned(), format!(".{f}")),
         None => (rendered, String::new()),
     };
@@ -395,6 +410,23 @@ mod tests {
         assert_eq!(format_amount(675.91), "675.91");
         assert_eq!(format_amount(1.37), "1.37");
         assert_eq!(format_amount(0.0841), "0.0841");
+    }
+
+    #[test]
+    fn sub_cent_prices_drop_their_padding_zeros() {
+        // Real values: SHIB and a hypothetical one ending in zeros.
+        assert_eq!(format_amount(0.00000541), "0.00000541");
+        assert_eq!(format_amount(0.000005), "0.000005");
+        assert_eq!(format_amount(0.05), "0.05");
+        // The two-decimal range keeps its zeros so ordinary prices stay aligned.
+        assert_eq!(format_amount(675.90), "675.90");
+        assert_eq!(format_amount(675.00), "675.00");
+    }
+
+    #[test]
+    fn high_denomination_currencies_still_group() {
+        // IDR prices are the widest realistic case.
+        assert_eq!(format_amount(1_360_446_498.0), "1,360,446,498");
     }
 
     #[test]
