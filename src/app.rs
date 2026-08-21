@@ -13,6 +13,15 @@ use cosmic::widget;
 /// Panel icon, recoloured by the panel theme.
 const PANEL_ICON: &str = "io.github.zetakai.CosmicAppletCrypto-symbolic";
 
+/// Colour for a change value, or the default when there is no figure to show.
+fn change_class(change: Option<f64>) -> cosmic::theme::Text {
+    match change {
+        Some(c) if c > 0.0 => cosmic::theme::Text::Custom(up_colour),
+        Some(c) if c < 0.0 => cosmic::theme::Text::Custom(down_colour),
+        _ => cosmic::theme::Text::Default,
+    }
+}
+
 /// Text::Custom takes a plain fn pointer, so these cannot be closures over the
 /// theme; they read it themselves when asked to style.
 fn up_colour(theme: &cosmic::Theme) -> cosmic::iced::widget::text::Style {
@@ -40,6 +49,11 @@ fn srgba_to_hex(c: cosmic::cosmic_theme::palette::Srgba) -> String {
         channel(c.blue)
     )
 }
+
+/// Arrows sit in their own narrow column so they align down the list; the value
+/// column is wide enough for the realistic worst case, "-99.9%".
+const ARROW_COL_WIDTH: f32 = 14.0;
+const CHANGE_COL_WIDTH: f32 = 48.0;
 
 /// Rough advance width of the popup's body font, used to size the price column to
 /// its content. Approximate is fine: the column is padded either way.
@@ -387,25 +401,34 @@ impl cosmic::Application for AppModel {
                 )
                 .width(Length::Fixed(price_width))
                 .into(),
+                // Arrow and percentage occupy separate fixed columns. Rendered as
+                // one right-aligned string the arrows drift horizontally, because
+                // the number beside them varies in width.
+                //
+                // Both are coloured by the 24h direction, which is deliberately
+                // independent of the sparkline's week-long one — a coin can be up on
+                // the day and down on the week, and hiding that would be less honest
+                // than showing two colours.
                 widget::container(
-                    // Coloured by its own 24h direction, which is deliberately
-                    // independent of the sparkline's week-long one — a coin can be
-                    // up on the day and down on the week, and hiding that would be
-                    // less honest than showing two colours.
+                    widget::text::body(
+                        quote.change.map(crypto::change_arrow).unwrap_or(""),
+                    )
+                    .class(change_class(quote.change))
+                    .align_x(Alignment::Center),
+                )
+                .width(Length::Fixed(ARROW_COL_WIDTH))
+                .into(),
+                widget::container(
                     widget::text::body(
                         quote
                             .change
-                            .map(|c| crypto::format_change(c, true))
+                            .map(|c| crypto::format_change_value(c, true))
                             .unwrap_or_default(),
                     )
-                    .class(match quote.change {
-                        Some(c) if c > 0.0 => cosmic::theme::Text::Custom(up_colour),
-                        Some(c) if c < 0.0 => cosmic::theme::Text::Custom(down_colour),
-                        _ => cosmic::theme::Text::Default,
-                    })
+                    .class(change_class(quote.change))
                     .align_x(Alignment::End),
                 )
-                .width(Length::Fixed(56.0))
+                .width(Length::Fixed(CHANGE_COL_WIDTH))
                 .into(),
             ];
 

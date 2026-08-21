@@ -394,20 +394,38 @@ pub fn format_compact(value: f64) -> String {
     }
 }
 
-/// `▲ 6.28%` for the popup, `▲6.3%` for the panel.
-pub fn format_change(change: f64, short: bool) -> String {
-    let arrow = if change > 0.0 {
-        '▲'
+/// Direction glyph on its own, so it can be laid out in a fixed column where the
+/// arrows line up instead of drifting with the width of the number beside them.
+pub fn change_arrow(change: f64) -> &'static str {
+    if change > 0.0 {
+        "▲"
     } else if change < 0.0 {
-        '▼'
+        "▼"
     } else {
-        '•'
-    };
-    if short {
-        format!("{arrow}{change:.1}%")
-    } else {
-        format!("{arrow} {change:.2}%")
+        "•"
     }
+}
+
+/// The magnitude alone: `6.28%`.
+///
+/// Unsigned, because the arrow already carries the direction and rendering both
+/// gives `▼-1.50%`, which says the same thing twice.
+pub fn format_change_value(change: f64, short: bool) -> String {
+    let magnitude = change.abs();
+    if short {
+        format!("{magnitude:.1}%")
+    } else {
+        format!("{magnitude:.2}%")
+    }
+}
+
+/// Arrow and magnitude together, for the single-line panel label.
+pub fn format_change(change: f64, short: bool) -> String {
+    format!(
+        "{} {}",
+        change_arrow(change),
+        format_change_value(change, short)
+    )
 }
 
 #[cfg(test)]
@@ -673,8 +691,23 @@ mod tests {
 
     #[test]
     fn change_arrow_tracks_direction() {
+        assert_eq!(change_arrow(6.28), "▲");
+        assert_eq!(change_arrow(-1.5), "▼");
+        assert_eq!(change_arrow(0.0), "•");
+    }
+
+    #[test]
+    fn change_value_is_unsigned() {
+        // The arrow carries the direction; a minus would repeat it.
+        assert_eq!(format_change_value(-1.5, true), "1.5%");
+        assert_eq!(format_change_value(-12.34, false), "12.34%");
+        assert_eq!(format_change_value(6.28, false), "6.28%");
+    }
+
+    #[test]
+    fn combined_form_separates_arrow_from_value() {
         assert_eq!(format_change(6.28, false), "▲ 6.28%");
-        assert_eq!(format_change(-1.5, true), "▼-1.5%");
-        assert_eq!(format_change(0.0, true), "•0.0%");
+        assert_eq!(format_change(-1.5, true), "▼ 1.5%");
+        assert_eq!(format_change(0.0, true), "• 0.0%");
     }
 }
