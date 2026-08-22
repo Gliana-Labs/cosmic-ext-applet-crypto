@@ -2,7 +2,7 @@
 Name=Cosmic Applet Crypto
 Comment=Live cryptocurrency prices in the COSMIC panel
 Type=Application
-Icon=io.github.zetakai.CosmicAppletCrypto
+Icon=io.github.Zetakai.cosmic-applet-crypto
 Exec=cosmic-applet-crypto %F
 Terminal=false
 StartupNotify=true

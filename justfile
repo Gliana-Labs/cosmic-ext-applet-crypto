@@ -1,5 +1,5 @@
 name := 'cosmic-applet-crypto'
-appid := 'io.github.zetakai.CosmicAppletCrypto'
+appid := 'io.github.Zetakai.cosmic-applet-crypto'
 rootdir := ''
 prefix := '/usr'
 

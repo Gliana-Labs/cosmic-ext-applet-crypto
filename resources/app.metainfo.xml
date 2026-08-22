@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.zetakai.CosmicAppletCrypto</id>
+  <id>io.github.Zetakai.cosmic-applet-crypto</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>Cosmic Applet Crypto</name>
@@ -31,7 +31,7 @@
     </p>
   </description>
 
-  <launchable type="desktop-id">io.github.zetakai.CosmicAppletCrypto.desktop</launchable>
+  <launchable type="desktop-id">io.github.Zetakai.cosmic-applet-crypto.desktop</launchable>
 
   <url type="homepage">https://github.com/Zetakai/cosmic-applet-crypto</url>
   <url type="bugtracker">https://github.com/Zetakai/cosmic-applet-crypto/issues</url>

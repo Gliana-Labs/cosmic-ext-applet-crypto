@@ -81,7 +81,7 @@ Configure it through `~/.config/cbar/env` — see the comments at the top of the
 ## Configuration
 
 The applet stores settings via `cosmic-config` at
-`~/.config/cosmic/io.github.zetakai.CosmicAppletCrypto/v1/`.
+`~/.config/cosmic/io.github.Zetakai.cosmic-applet-crypto/v1/`.
 
 | Key | Default | Meaning |
 |---|---|---|
