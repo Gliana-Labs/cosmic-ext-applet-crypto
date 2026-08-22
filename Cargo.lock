@@ -889,21 +889,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cosmic-applet-crypto"
-version = "0.1.0"
-dependencies = [
- "i18n-embed",
- "i18n-embed-fl",
- "libcosmic",
- "reqwest",
- "rust-embed",
- "serde",
- "serde_json",
- "tokio",
- "xdgen",
-]
-
-[[package]]
 name = "cosmic-client-toolkit"
 version = "0.2.0"
 source = "git+https://github.com/pop-os/cosmic-protocols?rev=32283d7#32283d76a8d0342da74c4cc022a533c52dcf378f"
@@ -944,6 +929,21 @@ source = "git+https://github.com/pop-os/libcosmic.git#ef490df50b0a05a21c494c3f75
 dependencies = [
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "cosmic-ext-applet-crypto"
+version = "0.1.0"
+dependencies = [
+ "i18n-embed",
+ "i18n-embed-fl",
+ "libcosmic",
+ "reqwest",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "tokio",
+ "xdgen",
 ]
 
 [[package]]

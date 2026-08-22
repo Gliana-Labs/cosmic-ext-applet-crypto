@@ -1,4 +1,4 @@
-# cosmic-applet-crypto
+# cosmic-ext-applet-crypto
 
 Live cryptocurrency prices in the COSMIC™ desktop panel.
 
@@ -58,8 +58,8 @@ This is a native applet built on libcosmic.
 Requires a Rust toolchain.
 
 ```bash
-git clone https://github.com/Zetakai/cosmic-applet-crypto.git
-cd cosmic-applet-crypto
+git clone https://github.com/Zetakai/cosmic-ext-applet-crypto.git
+cd cosmic-ext-applet-crypto
 just build-release
 just install
 ```
@@ -81,7 +81,7 @@ Configure it through `~/.config/cbar/env` — see the comments at the top of the
 ## Configuration
 
 The applet stores settings via `cosmic-config` at
-`~/.config/cosmic/io.github.Zetakai.cosmic-applet-crypto/v1/`.
+`~/.config/cosmic/io.github.Zetakai.cosmic-ext-applet-crypto/v1/`.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -115,7 +115,7 @@ text style is accepting the width that comes with it.
 ## Behaviour
 
 - **Startup costs no request.** The last good prices are cached under
-  `$XDG_CACHE_HOME/cosmic-applet-crypto/` and shown immediately; the network is only
+  `$XDG_CACHE_HOME/cosmic-ext-applet-crypto/` and shown immediately; the network is only
   touched if that cache is older than the refresh interval. Restarting the panel
   therefore does not spend an API call, which is what turns a burst of restarts into
   a rate limit.

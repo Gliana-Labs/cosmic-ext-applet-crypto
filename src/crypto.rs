@@ -19,7 +19,7 @@ const USER_AGENT: &str = concat!(
     env!("CARGO_PKG_NAME"),
     "/",
     env!("CARGO_PKG_VERSION"),
-    " (+https://github.com/Zetakai/cosmic-applet-crypto)"
+    " (+https://github.com/Zetakai/cosmic-ext-applet-crypto)"
 );
 
 /// Sparkline points kept after downsampling. 168 hourly samples is far more detail
@@ -114,7 +114,7 @@ fn cache_path() -> Option<std::path::PathBuf> {
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(std::path::PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".cache")))?;
-    Some(base.join("cosmic-applet-crypto").join("quotes.json"))
+    Some(base.join("cosmic-ext-applet-crypto").join("quotes.json"))
 }
 
 /// Quotes plus when they were taken, so staleness can be judged on load.
@@ -649,7 +649,7 @@ mod tests {
 
     fn scratch_cache(tag: &str) -> std::path::PathBuf {
         std::env::temp_dir()
-            .join(format!("cosmic-applet-crypto-test-{}-{tag}", std::process::id()))
+            .join(format!("cosmic-ext-applet-crypto-test-{}-{tag}", std::process::id()))
             .join("quotes.json")
     }
 

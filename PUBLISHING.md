@@ -27,7 +27,7 @@ cosmic    https://apt.pop-os.org/cosmic/    user
 
 ## Already done
 
-- `flatpak/io.github.Zetakai.cosmic-applet-crypto.json` — the manifest, pinned to the
+- `flatpak/io.github.Zetakai.cosmic-ext-applet-crypto.json` — the manifest, pinned to the
   `v0.1.0` tag and its commit
 - `flatpak/cargo-sources.json` — 1406 offline dependency entries, required because
   the build runs with `--offline`
@@ -73,10 +73,10 @@ flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/fl
 
 git clone https://github.com/pop-os/cosmic-flatpak.git
 cd cosmic-flatpak
-mkdir -p app/io.github.Zetakai.cosmic-applet-crypto
-cp ~/Documents/GitHub/cosmic-applet-crypto/flatpak/* app/io.github.Zetakai.cosmic-applet-crypto/
+mkdir -p app/io.github.Zetakai.cosmic-ext-applet-crypto
+cp ~/Documents/GitHub/cosmic-ext-applet-crypto/flatpak/* app/io.github.Zetakai.cosmic-ext-applet-crypto/
 
-just build io.github.Zetakai.cosmic-applet-crypto
+just build io.github.Zetakai.cosmic-ext-applet-crypto
 ```
 
 The build pulls a large dependency tree and takes a while. Then install and confirm
@@ -84,18 +84,18 @@ it actually runs as a panel applet, which is the part no amount of manifest revi
 can tell you:
 
 ```bash
-flatpak install --user repo io.github.Zetakai.cosmic-applet-crypto
-flatpak run io.github.Zetakai.cosmic-applet-crypto
+flatpak install --user repo io.github.Zetakai.cosmic-ext-applet-crypto
+flatpak run io.github.Zetakai.cosmic-ext-applet-crypto
 ```
 
 ## Step 3 — open the pull request
 
 ```bash
 # on your fork of pop-os/cosmic-flatpak
-git checkout -b add-cosmic-applet-crypto
-git add app/io.github.Zetakai.cosmic-applet-crypto
-git commit -m "Add io.github.Zetakai.cosmic-applet-crypto"
-git push origin add-cosmic-applet-crypto
+git checkout -b add-cosmic-ext-applet-crypto
+git add app/io.github.Zetakai.cosmic-ext-applet-crypto
+git commit -m "Add io.github.Zetakai.cosmic-ext-applet-crypto"
+git push origin add-cosmic-ext-applet-crypto
 ```
 
 Open the PR against `master`. CI runs `just build-changed`, which builds only the

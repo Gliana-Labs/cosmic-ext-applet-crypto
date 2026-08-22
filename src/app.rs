@@ -11,7 +11,7 @@ use cosmic::prelude::*;
 use cosmic::widget;
 
 /// Panel icon, recoloured by the panel theme.
-const PANEL_ICON: &str = "io.github.Zetakai.cosmic-applet-crypto-symbolic";
+const PANEL_ICON: &str = "io.github.Zetakai.cosmic-ext-applet-crypto-symbolic";
 
 /// Colour for a change value, or the default when there is no figure to show.
 fn change_class(change: Option<f64>) -> cosmic::theme::Text {
@@ -211,7 +211,7 @@ impl cosmic::Application for AppModel {
     type Flags = ();
     type Message = Message;
 
-    const APP_ID: &'static str = "io.github.Zetakai.cosmic-applet-crypto";
+    const APP_ID: &'static str = "io.github.Zetakai.cosmic-ext-applet-crypto";
 
     fn core(&self) -> &cosmic::Core {
         &self.core

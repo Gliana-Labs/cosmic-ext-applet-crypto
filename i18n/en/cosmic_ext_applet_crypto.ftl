@@ -1,5 +1,5 @@
-app-title = Cosmic Applet Crypto
-app-comment = Live cryptocurrency prices in the COSMIC panel
+app-title = Crypto Prices
+app-comment = Live cryptocurrency prices for the COSMIC™ desktop
 app-keywords =
 about = About
 view = View

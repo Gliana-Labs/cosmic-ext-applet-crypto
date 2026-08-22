@@ -1,10 +1,10 @@
 [package]
-name = "cosmic-applet-crypto"
+name = "cosmic-ext-applet-crypto"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
 description = "Live cryptocurrency prices in the COSMIC panel"
-repository = "https://github.com/Zetakai/cosmic-applet-crypto"
+repository = "https://github.com/Zetakai/cosmic-ext-applet-crypto"
 
 [build-dependencies]
 xdgen = "0.1"

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.Zetakai.cosmic-applet-crypto</id>
+  <id>io.github.Zetakai.cosmic-ext-applet-crypto</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
-  <name>Cosmic Applet Crypto</name>
-  <summary>Live cryptocurrency prices in the COSMIC panel</summary>
+  <name>Crypto Prices</name>
+  <summary>Live cryptocurrency prices for the COSMIC™ desktop</summary>
 
   <developer id="io.github.zetakai">
     <name>Zetakai</name>
@@ -12,7 +12,7 @@
 
   <description>
     <p>
-      Shows live cryptocurrency prices in the COSMIC panel. The panel carries one
+      Shows live cryptocurrency prices in the panel of the COSMIC™ desktop. The panel carries one
       coin's price at a glance; the popup lists every coin you track with its 24h
       change and a seven-day sparkline.
     </p>
@@ -31,16 +31,16 @@
     </p>
   </description>
 
-  <launchable type="desktop-id">io.github.Zetakai.cosmic-applet-crypto.desktop</launchable>
+  <launchable type="desktop-id">io.github.Zetakai.cosmic-ext-applet-crypto.desktop</launchable>
 
-  <url type="homepage">https://github.com/Zetakai/cosmic-applet-crypto</url>
-  <url type="bugtracker">https://github.com/Zetakai/cosmic-applet-crypto/issues</url>
-  <url type="vcs-browser">https://github.com/Zetakai/cosmic-applet-crypto</url>
+  <url type="homepage">https://github.com/Zetakai/cosmic-ext-applet-crypto</url>
+  <url type="bugtracker">https://github.com/Zetakai/cosmic-ext-applet-crypto/issues</url>
+  <url type="vcs-browser">https://github.com/Zetakai/cosmic-ext-applet-crypto</url>
 
   <screenshots>
     <screenshot type="default">
       <caption>Tracked coins with their 24h change and seven-day trend</caption>
-      <image>https://raw.githubusercontent.com/Zetakai/cosmic-applet-crypto/main/resources/screenshots/popup.png</image>
+      <image>https://raw.githubusercontent.com/Zetakai/cosmic-ext-applet-crypto/main/resources/screenshots/popup.png</image>
     </screenshot>
   </screenshots>
 
@@ -55,7 +55,7 @@
   <provides>
     <id>com.system76.CosmicApplet</id>
     <binaries>
-      <binary>cosmic-applet-crypto</binary>
+      <binary>cosmic-ext-applet-crypto</binary>
     </binaries>
   </provides>
 
@@ -82,4 +82,9 @@
   </keywords>
 
   <content_rating type="oars-1.1" />
+
+  <!--
+    COSMIC is a trademark of System76. This is a third-party applet and is not
+    affiliated with, endorsed by, or sponsored by System76.
+  -->
 </component>

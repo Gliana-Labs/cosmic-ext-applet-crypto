@@ -1,9 +1,9 @@
 [Desktop Entry]
-Name=Cosmic Applet Crypto
-Comment=Live cryptocurrency prices in the COSMIC panel
+Name=Crypto Prices
+Comment=Live cryptocurrency prices for the COSMIC™ desktop
 Type=Application
-Icon=io.github.Zetakai.cosmic-applet-crypto
-Exec=cosmic-applet-crypto %F
+Icon=io.github.Zetakai.cosmic-ext-applet-crypto
+Exec=cosmic-ext-applet-crypto %F
 Terminal=false
 StartupNotify=true
 Categories=COSMIC
