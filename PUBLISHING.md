@@ -1,123 +1,160 @@
-# Publishing to the COSMIC Store
+# Packaging and publishing
 
-## Flathub will reject this app
+The applet is published in the COSMIC Store through
+[`pop-os/cosmic-flatpak`](https://github.com/pop-os/cosmic-flatpak) as
+`io.github.Zetakai.cosmic-ext-applet-crypto`.
 
-Not a matter of quality — [Flathub's requirements](https://docs.flathub.org/docs/for-app-authors/requirements)
-exclude this whole class of software, on two counts:
+## Why not Flathub
+
+[Flathub's requirements](https://docs.flathub.org/docs/for-app-authors/requirements)
+exclude this whole class of software on two counts:
 
 > Shell, window manager, desktop environment extensions will not be accepted.
 
 > Applications that operate exclusively as tray applets will not be accepted.
 
 A COSMIC panel applet is both. Do not spend time on a Flathub submission.
+`cosmic-flatpak` exists precisely for "applets and other flatpaks for COSMIC that are
+not suitable for upload to Flathub", and its remote ships configured on COSMIC
+systems, so apps merged there appear in the COSMIC Store.
 
-## The actual route: pop-os/cosmic-flatpak
+## Shipping an update
 
-[`pop-os/cosmic-flatpak`](https://github.com/pop-os/cosmic-flatpak) exists precisely
-for "applets and other flatpaks for COSMIC that are not suitable for upload to
-Flathub". It already hosts several dozen COSMIC applets.
+1. **Make the change and bump the version.**
 
-Its remote ships configured on COSMIC systems, so apps merged there appear in the
-COSMIC Store:
+   ```bash
+   # Cargo.toml: version = "0.1.2"
+   # resources/app.metainfo.xml: add a <release> entry at the top of <releases>
+   cargo test
+   ```
 
-```
-$ flatpak remotes
-cosmic    https://apt.pop-os.org/cosmic/    user
-```
+   The `<release>` entry matters — the store shows it as the changelog.
 
-## Already done
+2. **Tag and release.**
 
-- `flatpak/io.github.Zetakai.cosmic-ext-applet-crypto.json` — the manifest, pinned to the
-  `v0.1.0` tag and its commit
-- `flatpak/cargo-sources.json` — 1406 offline dependency entries, required because
-  the build runs with `--offline`
-- `resources/app.metainfo.xml` — description, developer, URLs, releases, screenshot
-  entry, all of which the store displays
-- `v0.1.0` tagged, pushed, and released on GitHub
+   ```bash
+   git tag -a v0.1.2 -m "Short summary"
+   git push origin main && git push origin v0.1.2
+   gh release create v0.1.2 --title "v0.1.2" --notes "..."
+   ```
 
-The manifest carries `--share=network`, which the applets it was modelled on do not
-need and this one cannot work without.
+3. **Regenerate the offline sources, but only if dependencies changed.**
 
-## Step 1 — take a screenshot
+   `cargo-sources.json` is the dependency set, not the package. A version bump alone
+   does not change it; a `Cargo.lock` change from adding or updating a dependency
+   does.
 
-The metainfo points at `resources/screenshots/popup.png`, which does not exist yet.
-The store shows this, and a submission without one is worth much less.
+   ```bash
+   python3 -m venv /tmp/fcg && /tmp/fcg/bin/pip install aiohttp toml tomlkit
+   curl -fsSLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
+   /tmp/fcg/bin/python flatpak-cargo-generator.py Cargo.lock -o flatpak/cargo-sources.json
+   ```
 
-Open the popup with a few coins tracked, then:
+4. **Point the manifest at the new tag.**
+
+   Update `tag` and `commit` in
+   `flatpak/io.github.Zetakai.cosmic-ext-applet-crypto.json`. The commit must be the
+   one the tag points at: `git rev-parse v0.1.2^{commit}`.
+
+5. **Open the PR against `cosmic-flatpak`.**
+
+   ```bash
+   git clone https://github.com/<you>/cosmic-flatpak.git && cd cosmic-flatpak
+   git remote add upstream https://github.com/pop-os/cosmic-flatpak.git
+   git fetch upstream master
+   git checkout -b update-crypto-0.1.2 upstream/master
+   cp ~/Documents/GitHub/cosmic-ext-applet-crypto/flatpak/* \
+      app/io.github.Zetakai.cosmic-ext-applet-crypto/
+   git commit -am "Update io.github.Zetakai.cosmic-ext-applet-crypto to v0.1.2"
+   ```
+
+   Open it against `master` — the `new-pr` branch rule is Flathub's, not theirs.
+
+   **Fill in their PR template.** GitHub pre-fills it from
+   `.github/PULL_REQUEST_TEMPLATE.md`; do not replace it with your own description,
+   which is what got the first submission sent back. It requires disclosing AI
+   generated code **in the commit messages**, not only in the PR body.
+
+6. **CI builds it.** A first-time contributor's run needs a maintainer to approve it.
+
+## Checking before you submit
 
 ```bash
-# COSMIC's screenshot tool, or any tool you prefer
-cosmic-screenshot
-mv <captured file> resources/screenshots/popup.png
-git add resources/screenshots/popup.png
-git commit -m "Add popup screenshot"
-git push
+flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest \
+  app/io.github.Zetakai.cosmic-ext-applet-crypto/io.github.Zetakai.cosmic-ext-applet-crypto.json
 ```
 
-Then move the `v0.1.0` tag so the release contains it:
+No output means it passed.
+
+It currently reports one known error, `appid-url-not-reachable`: the App ID encodes
+`Zetakai` while the repository now lives under `Gliana-Labs`, so the derived URL
+301-redirects and the linter treats that as unverified. The build is unaffected and
+`cosmic-flatpak` CI runs the build rather than the linter. See below.
+
+A full local build needs the SDK extension, which is a large download:
 
 ```bash
-git tag -f -a v0.1.0 -m "First release"
-git push -f origin v0.1.0
-```
-
-and update `commit` in the manifest to the new `git rev-parse v0.1.0^{commit}`.
-
-## Step 2 — build it locally first
-
-A submission that fails CI wastes a reviewer's time.
-
-```bash
-sudo apt-get install flatpak flatpak-builder just
-flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-
-git clone https://github.com/pop-os/cosmic-flatpak.git
-cd cosmic-flatpak
-mkdir -p app/io.github.Zetakai.cosmic-ext-applet-crypto
-cp ~/Documents/GitHub/cosmic-ext-applet-crypto/flatpak/* app/io.github.Zetakai.cosmic-ext-applet-crypto/
-
+flatpak install --user flathub org.flatpak.Builder \
+  com.system76.Cosmic.BaseApp//stable org.freedesktop.Sdk.Extension.rust-stable//25.08
 just build io.github.Zetakai.cosmic-ext-applet-crypto
 ```
 
-The build pulls a large dependency tree and takes a while. Then install and confirm
-it actually runs as a panel applet, which is the part no amount of manifest review
-can tell you:
+Note `runtime-version` must stay at `25.08`. `24.08` ships Rust 1.89 and the build
+fails on `libcosmic 1.0.0 requires rustc 1.93`.
 
-```bash
-flatpak install --user repo io.github.Zetakai.cosmic-ext-applet-crypto
-flatpak run io.github.Zetakai.cosmic-ext-applet-crypto
+## Deferred: renaming the App ID
+
+Not urgent, and deliberately not done yet. Recorded so the reasoning is not lost.
+
+The App ID is `io.github.Zetakai.cosmic-ext-applet-crypto`, from when the repository
+was under an individual account. The project now belongs to Gliana Labs, so the ID no
+longer reflects its owner.
+
+`io.github.Gliana-Labs.…` is **not** a valid alternative: App IDs allow a dash only
+in the final component, and `Gliana-Labs` has one in the middle. The correct form,
+since Gliana Labs owns `glianalabs.com`, is:
+
+```
+com.glianalabs.CosmicExtAppletCrypto
 ```
 
-## Step 3 — open the pull request
+**Why it has not been done:** an App ID change creates a *new* flatpak app. The old
+one has to be marked end-of-life and rebased onto the new one, or existing installs
+are stranded. That is churn to ask of a maintainer for an app that had only just been
+merged, in exchange for tidiness — the ID is an opaque identifier, and users see
+"Crypto Prices" by "Gliana Labs" either way.
 
-```bash
-# on your fork of pop-os/cosmic-flatpak
-git checkout -b add-cosmic-ext-applet-crypto
-git add app/io.github.Zetakai.cosmic-ext-applet-crypto
-git commit -m "Add io.github.Zetakai.cosmic-ext-applet-crypto"
-git push origin add-cosmic-ext-applet-crypto
-```
+**What it would take, when it is worth doing:**
 
-Open the PR against `master`. CI runs `just build-changed`, which builds only the
-manifests your PR touches.
+1. Change `APP_ID` in `src/app.rs`, the manifest `app-id`, the icon filenames, the
+   metainfo `<id>` and `<launchable>`, and the desktop file name.
+2. Migrate settings: the config path
+   `~/.config/cosmic/<app-id>/` is derived from the ID, so existing users lose their
+   coin list unless the applet copies the old directory forward on first run.
+3. Tag a release and open a PR adding `app/com.glianalabs.CosmicExtAppletCrypto/`.
+4. Add a line to `cosmic-flatpak`'s `end-of-life.txt` in the same PR:
 
-Note this differs from Flathub, which requires PRs against a `new-pr` branch. That
-rule does not apply here.
+   ```
+   io.github.Zetakai.cosmic-ext-applet-crypto=com.glianalabs.CosmicExtAppletCrypto
+   ```
 
-## Step 4 — after merge
+   Their `just eol` recipe reads that file and publishes an end-of-life rebase, which
+   migrates installed copies automatically.
+5. Keep the old directory until the rebase has propagated.
 
-The repository is rebuilt and signed by the maintainers, and the app appears in the
-COSMIC Store for anyone with the `cosmic` remote.
+Doing this also clears the `appid-url-not-reachable` lint error, since
+`https://glianalabs.com` resolves directly.
 
-To ship an update: tag a new release, regenerate `cargo-sources.json` if
-dependencies changed, and open a PR bumping `tag` and `commit` in the manifest.
+## Store listing gotchas
 
-## Regenerating cargo-sources.json
-
-Needed whenever `Cargo.lock` changes.
-
-```bash
-python3 -m venv /tmp/fcg && /tmp/fcg/bin/pip install aiohttp toml tomlkit
-curl -fsSLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
-/tmp/fcg/bin/python flatpak-cargo-generator.py Cargo.lock -o flatpak/cargo-sources.json
-```
+- **Developer name.** cosmic-store reads the deprecated `developer_name` tag, not the
+  newer `<developer><name>`. With only the latter, the listing showed an
+  auto-generated "Crypto Prices Developers". The metainfo carries both.
+- **Screenshots** come from the URLs in the metainfo, which point at `raw.githubusercontent.com`
+  on `main`. They are fetched when the repository is rebuilt, so a screenshot must be
+  committed and the tag must contain it.
+- **Trademark.** [COSMIC's policy](https://github.com/pop-os/cosmic-epoch/blob/master/TRADEMARK.md)
+  reserves the `cosmic-` package namespace and `com.system76.` App ID prefix for
+  official software, and directs third-party applets to `cosmic-ext-`. An applet may
+  be described as "for the COSMIC™ desktop" but should not lead with the trademark in
+  its name.
