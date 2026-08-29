@@ -6,8 +6,15 @@
   <name>Crypto Prices</name>
   <summary>Live cryptocurrency prices for the COSMIC™ desktop</summary>
 
-  <developer id="io.github.zetakai">
-    <name>Zetakai</name>
+  <!--
+    developer_name is deprecated in AppStream in favour of <developer><name>, but
+    cosmic-store reads the legacy tag: without it the listing showed an
+    auto-generated "Crypto Prices Developers". Both are present so either parser
+    finds a real name.
+  -->
+  <developer_name>Gliana Labs</developer_name>
+  <developer id="com.glianalabs">
+    <name>Gliana Labs</name>
   </developer>
 
   <description>
@@ -33,18 +40,23 @@
 
   <launchable type="desktop-id">io.github.Zetakai.cosmic-ext-applet-crypto.desktop</launchable>
 
-  <url type="homepage">https://github.com/Zetakai/cosmic-ext-applet-crypto</url>
-  <url type="bugtracker">https://github.com/Zetakai/cosmic-ext-applet-crypto/issues</url>
-  <url type="vcs-browser">https://github.com/Zetakai/cosmic-ext-applet-crypto</url>
+  <url type="homepage">https://github.com/Gliana-Labs/cosmic-ext-applet-crypto</url>
+  <url type="bugtracker">https://github.com/Gliana-Labs/cosmic-ext-applet-crypto/issues</url>
+  <url type="vcs-browser">https://github.com/Gliana-Labs/cosmic-ext-applet-crypto</url>
 
   <screenshots>
     <screenshot type="default">
       <caption>Tracked coins with their 24h change and seven-day trend</caption>
-      <image>https://raw.githubusercontent.com/Zetakai/cosmic-ext-applet-crypto/main/resources/screenshots/popup.png</image>
+      <image>https://raw.githubusercontent.com/Gliana-Labs/cosmic-ext-applet-crypto/main/resources/screenshots/popup.png</image>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="0.1.1" date="2026-08-29">
+      <description>
+        <p>Names Gliana Labs as the developer in the store listing.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-08-22">
       <description>
         <p>First release.</p>

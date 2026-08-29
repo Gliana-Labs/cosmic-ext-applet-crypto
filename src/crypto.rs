@@ -19,7 +19,7 @@ const USER_AGENT: &str = concat!(
     env!("CARGO_PKG_NAME"),
     "/",
     env!("CARGO_PKG_VERSION"),
-    " (+https://github.com/Zetakai/cosmic-ext-applet-crypto)"
+    " (+https://github.com/Gliana-Labs/cosmic-ext-applet-crypto)"
 );
 
 /// Sparkline points kept after downsampling. 168 hourly samples is far more detail
