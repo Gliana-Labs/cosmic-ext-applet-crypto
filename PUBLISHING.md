@@ -147,9 +147,14 @@ Doing this also clears the `appid-url-not-reachable` lint error, since
 
 ## Store listing gotchas
 
-- **Developer name.** cosmic-store reads the deprecated `developer_name` tag, not the
-  newer `<developer><name>`. With only the latter, the listing showed an
-  auto-generated "Crypto Prices Developers". The metainfo carries both.
+- **Developer name.** cosmic-store reads `developer_name` and nothing else.
+  `src/app_info.rs` takes `component.developer_name`, and `src/view.rs` falls back to
+  the `app-developers` string — `{$app} Developers` — when it is empty, which is why
+  this listing first showed "Crypto Prices Developers". Its appstream dependency is a
+  fork ([jackpot51/appstream](https://github.com/jackpot51/appstream)), so the newer
+  `<developer><name>` is not read there; do not drop `developer_name` on the
+  assumption that the modern tag has started working. The metainfo carries both,
+  since upstream AppStream deprecated `developer_name` in 1.0.
 - **Screenshots** come from the URLs in the metainfo, which point at `raw.githubusercontent.com`
   on `main`. They are fetched when the repository is rebuilt, so a screenshot must be
   committed and the tag must contain it.

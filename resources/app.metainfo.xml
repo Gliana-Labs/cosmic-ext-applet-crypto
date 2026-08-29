@@ -7,10 +7,15 @@
   <summary>Live cryptocurrency prices for the COSMIC™ desktop</summary>
 
   <!--
-    developer_name is deprecated in AppStream in favour of <developer><name>, but
-    cosmic-store reads the legacy tag: without it the listing showed an
-    auto-generated "Crypto Prices Developers". Both are present so either parser
-    finds a real name.
+    Both spellings are deliberate. cosmic-store reads developer_name and nothing
+    else: app_info.rs takes component.developer_name, and view.rs falls back to the
+    "{app} Developers" string when it is empty, which is why this listing first
+    showed "Crypto Prices Developers". Its appstream dependency is a fork
+    (github.com/jackpot51/appstream), so the newer <developer><name> is not read
+    there and dropping developer_name would silently break the listing again.
+
+    <developer><name> is kept for everything else: upstream AppStream deprecated
+    developer_name in 1.0 in favour of it.
   -->
   <developer_name>Gliana Labs</developer_name>
   <developer id="com.glianalabs">
