@@ -933,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "cosmic-ext-applet-crypto"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "i18n-embed",
  "i18n-embed-fl",
