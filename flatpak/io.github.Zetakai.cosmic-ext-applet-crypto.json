@@ -16,6 +16,7 @@
     "--device=dri",
     "--filesystem=xdg-config/cosmic:rw",
     "--talk-name=com.system76.CosmicSettingsDaemon",
+    "--talk-name=com.system76.CosmicSettingsDaemon.*",
     "--share=network"
   ],
   "build-options": {

@@ -57,6 +57,11 @@
   </screenshots>
 
   <releases>
+    <release version="0.1.5" date="2026-08-31">
+      <description>
+        <p>The applet now follows desktop theme changes while running.</p>
+      </description>
+    </release>
     <release version="0.1.4" date="2026-08-31">
       <description>
         <p>Restores access to the desktop theme and to saved settings when installed as a flatpak.</p>
