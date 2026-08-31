@@ -1,4 +1,4 @@
-# Crypto Prices
+# Crypto Ticker
 
 Live cryptocurrency prices in the panel of the COSMIC™ desktop, with a seven-day
 sparkline per coin.
@@ -15,7 +15,7 @@ BNB   ╱▔      $694.09   ▲ 9.5%
 
 ### COSMIC Store
 
-Search for **Crypto Prices**, or:
+Search for **Crypto Ticker**, or:
 
 ```bash
 flatpak install cosmic io.github.Zetakai.cosmic-ext-applet-crypto
@@ -27,7 +27,7 @@ The `cosmic` remote ships configured on COSMIC systems. If it is missing:
 flatpak remote-add --if-not-exists --user cosmic https://apt.pop-os.org/cosmic/cosmic.flatpakrepo
 ```
 
-Then add it in **Settings → Desktop → Panel → Add applet → Crypto Prices**.
+Then add it in **Settings → Desktop → Panel → Add applet → Crypto Ticker**.
 
 ### From source
 

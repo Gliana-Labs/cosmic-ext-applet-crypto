@@ -6,6 +6,7 @@ use crate::fl;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::platform_specific::shell::wayland::commands::popup::{destroy_popup, get_popup};
 use cosmic::iced::{time, window::Id, Alignment, Length, Limits, Radians, Rotation, Subscription};
+use cosmic::surface;
 use std::time::{Duration, Instant};
 use cosmic::prelude::*;
 use cosmic::widget;
@@ -134,6 +135,8 @@ pub enum Message {
     ToggleEdit,
     /// Advance the refresh spinner.
     SpinTick,
+    /// Surface actions raised by the panel tooltip.
+    Surface(surface::Action),
     /// A spawned side effect finished and needs no state change.
     Ignore,
 }
@@ -181,6 +184,13 @@ impl AppModel {
             }
             None => self.config.coins = coins,
         }
+    }
+
+    /// Hover text. Just the application name: a tooltip's job is to say what the
+    /// thing is, which on a vertical panel is otherwise only an unlabelled icon.
+    /// The price is a click away in the popup, and pairing the two read as clumsy.
+    fn tooltip_text(&self) -> String {
+        fl!("app-title")
     }
 
     /// "updated 2m ago" — answers whether what is on screen is current, which a
@@ -277,48 +287,35 @@ impl cosmic::Application for AppModel {
 
         // On a vertical panel the applet's width *is* the panel's thickness, so a
         // text label would force the whole bar wider. There the icon stands alone
-        // and the prices live in the popup. An explicitly chosen text style is
-        // still honoured — that is the user accepting the width.
+        // and the prices live in the popup.
         let icon_only = !horizontal && self.config.panel_style == PanelStyle::Icon;
-
         let label = self.panel_label();
-
-        // The plain icon and plain text cases have applet helpers that already size
-        // and centre the button correctly; only the icon-plus-text row has to be
-        // assembled by hand.
-        if icon_only || label.is_none() {
-            return applet
-                .icon_button(PANEL_ICON)
-                .on_press(Message::TogglePopup)
-                .into();
-        }
-
-        let label = label.unwrap_or_default();
-
-        if self.config.panel_style != PanelStyle::Icon {
-            return applet
-                .text_button(applet.text(label), Message::TogglePopup)
-                .into();
-        }
-
-        // Icon + text on a horizontal panel. Mirrors what button_from_element does,
-        // minus its fixed width, which would clip the label.
+        let suggested = applet.suggested_size(true);
         let (major, minor) = applet.suggested_padding(true);
         let (horizontal_padding, vertical_padding) =
             if horizontal { (major, minor) } else { (minor, major) };
-        let suggested = applet.suggested_size(true);
 
-        let content = widget::row::with_children(vec![
+        let icon = || {
             widget::icon::from_name(PANEL_ICON)
                 .symbolic(true)
                 .size(suggested.0)
-                .into(),
-            applet.text(label).into(),
-        ])
-        .spacing(4)
-        .align_y(Alignment::Center);
+        };
 
-        widget::button::custom(
+        let content: Element<'_, Self::Message> = if icon_only || label.is_none() {
+            icon().into()
+        } else if self.config.panel_style != PanelStyle::Icon {
+            applet.text(label.clone().unwrap_or_default()).into()
+        } else {
+            widget::row::with_children(vec![
+                icon().into(),
+                applet.text(label.clone().unwrap_or_default()).into(),
+            ])
+            .spacing(4)
+            .align_y(Alignment::Center)
+            .into()
+        };
+
+        let button = widget::button::custom(
             widget::layer_container::layer_container(content)
                 .center_y(Length::Fill)
                 .center_x(Length::Shrink),
@@ -326,8 +323,19 @@ impl cosmic::Application for AppModel {
         .height(Length::Fixed(f32::from(suggested.1 + 2 * vertical_padding)))
         .padding([0, horizontal_padding])
         .on_press(Message::TogglePopup)
-        .class(cosmic::theme::Button::AppletIcon)
-        .into()
+        .class(cosmic::theme::Button::AppletIcon);
+
+        // Hovering names the applet, which on a vertical panel is otherwise just an
+        // unlabelled icon.
+        applet
+            .applet_tooltip(
+                button,
+                self.tooltip_text(),
+                self.popup.is_some(),
+                Message::Surface,
+                None,
+            )
+            .into()
     }
 
     fn view_window(&self, _id: Id) -> Element<'_, Self::Message> {
@@ -582,6 +590,14 @@ impl cosmic::Application for AppModel {
             }
 
             Message::Ignore => {}
+
+            // The tooltip lives on its own Wayland surface; a plain tooltip would be
+            // clipped by the applet's.
+            Message::Surface(action) => {
+                return cosmic::task::message(cosmic::Action::Cosmic(
+                    cosmic::app::Action::Surface(action),
+                ));
+            }
 
             Message::SpinTick => {
                 if self.loading {

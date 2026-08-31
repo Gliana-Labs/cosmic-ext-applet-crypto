@@ -1,4 +1,4 @@
-app-title = Crypto Prices
+app-title = Crypto Ticker
 app-comment = Live cryptocurrency prices for the COSMIC™ desktop
 app-keywords =
 about = About

@@ -122,7 +122,7 @@ com.glianalabs.CosmicExtAppletCrypto
 one has to be marked end-of-life and rebased onto the new one, or existing installs
 are stranded. That is churn to ask of a maintainer for an app that had only just been
 merged, in exchange for tidiness — the ID is an opaque identifier, and users see
-"Crypto Prices" by "Gliana Labs" either way.
+"Crypto Ticker" by "Gliana Labs" either way.
 
 **What it would take, when it is worth doing:**
 
