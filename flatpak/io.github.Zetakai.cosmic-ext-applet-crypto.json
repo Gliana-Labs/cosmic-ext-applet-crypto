@@ -42,8 +42,8 @@
         {
           "type": "git",
           "url": "https://github.com/Gliana-Labs/cosmic-ext-applet-crypto.git",
-          "tag": "v0.1.4",
-          "commit": "bd5a0880f89a642ce2b479edef5c56f4f41eade8"
+          "tag": "v0.1.5",
+          "commit": "ede0c61d23e611417045fd7a52c87c6aacf07313"
         },
         "cargo-sources.json"
       ]
